@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import time # for handling date strings
+import datetime # for handling date strings
 import re
 import csv
 
@@ -45,6 +45,16 @@ def process_db_cvs_entry( row ):
     else:
         raise "Error."
 
+    # parse message body
+    transaction = process_message_body( message, is_mastercard_transaction )
+
+    # merge the common entries into it
+    transaction['date']   = date
+    transaction['amount'] = amount
+
+    return transaction, is_mastercard_transaction
+# ==============================================================================
+def process_message_body( message, is_mastercard_transaction ):
     # extract the value date ("Valutadatum")
     message, value_date = extract_value_date( message )
 
@@ -82,21 +92,18 @@ def process_db_cvs_entry( row ):
             transaction = None
             raise "Could not decode entry."
 
-    # merge the common entries into it
-    transaction['date']   = date
-    transaction['amount'] = amount
-    transaction['value date'] = value_date
+        transaction['value date'] = value_date
 
-    return transaction, is_mastercard_transaction
+        return transaction
 # ==============================================================================
 def get_formatted_date( raw_date ):
     # Decode 'date'.
     # DB has either long (2010) or short (10) year value, changing seemingly
     # randomly.
     try:
-        date = time.strptime( raw_date, "%d/%m/%y" )
+        date = datetime.datetime.strptime( raw_date, "%d/%m/%y" ).date()
     except:
-        date = time.strptime( raw_date, "%d/%m/%Y" )
+        date = datetime.datetime.strptime( raw_date, "%d/%m/%Y" ).date()
 
     return date
 # ==============================================================================
@@ -113,7 +120,7 @@ def extract_value_date( message ):
     valuta_pattern = re.compile( ".* Valutadatum:\xc2\xa0(\d\d/\d\d/\d\d\d\d).*" )
     valdate = valuta_pattern.findall( message )
     if len(valdate)>0:
-        value_date = time.strptime( valdate[0], "%d/%m/%Y" )
+        value_date = datetime.datetime.strptime( valdate[0], "%d/%m/%Y" ).date()
     else:
         value_date = None
 
@@ -130,6 +137,8 @@ def empty_transaction():
              'iban': None,
              'payee': None,
              'address': None,
+             'city': None,
+             'postal code': None,
              'message': None,
              'number': None,
              'currency': None,
@@ -147,13 +156,15 @@ def outgoing_national( str ):
 
     # match account number and address, e.g.,
     # "410-0659001-06 Onafhankelijkxc2\xa0Ziekenfonds Boomsesteenwgxc2\xa05, 2610xc2\xa0Antwerpen"
-    pattern = re.compile( "^Uw\xc2\xa0overschrijving (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), (\d\d\d\d \w*) (.*)" )
+    pattern = re.compile( "^Uw\xc2\xa0overschrijving (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), (\d\d\d\d) (\w*) (.*)" )
     res = pattern.findall( str )
     if len(res)==1:
         ret['account number'] = res[0][0]
         ret['payee']      = res[0][1]
-        ret['address']    = res[0][1:4]
-        ret['message']    = res[0][4]
+        ret['address']    = res[0][2]
+        ret['postal code'] = res[0][3]
+        ret['city'] = res[0][4]
+        ret['message']    = res[0][5]
         return ret
 
     # without address, e.g.
