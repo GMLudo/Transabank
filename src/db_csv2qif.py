@@ -10,4 +10,8 @@ file_name = 'TransactionListHistory-sun.csv'
 delim = ','
 
 transactions, mc_transactions = dbreader.read_db_cvsfile( file_name, delim )
+
+print qifwriter.print_qif( transactions )
+
+
 # ==============================================================================

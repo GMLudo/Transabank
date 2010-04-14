@@ -18,9 +18,9 @@ def read_db_cvsfile( file_name, delim = "," ):
     for row in dbReader:
         ta, is_mastercard_transaction = process_db_cvs_entry(row)
         if is_mastercard_transaction:
-            transactions.append( ta )
-        else:
             mc_transactions.append( ta )
+        else:
+            transactions.append( ta )
 
     return transactions, mc_transactions
 # ==============================================================================
@@ -43,7 +43,7 @@ def process_db_cvs_entry( row ):
         amount = get_amount( mastercard_amount )
         is_mastercard_transaction = True
     else:
-        raise "Error."
+        raise Exception, "Error."
 
     # parse message body
     transaction = process_message_body( message, is_mastercard_transaction )
@@ -90,11 +90,11 @@ def process_message_body( message, is_mastercard_transaction ):
             transaction = direct_debit( message )
         else:
             transaction = None
-            raise "Could not decode entry."
+            raise Exception, "Could not decode entry."
 
-        transaction['value date'] = value_date
+    transaction['value date'] = value_date
 
-        return transaction
+    return transaction
 # ==============================================================================
 def get_formatted_date( raw_date ):
     # Decode 'date'.
@@ -139,6 +139,7 @@ def empty_transaction():
              'address': None,
              'city': None,
              'postal code': None,
+             'country': None,
              'message': None,
              'number': None,
              'currency': None,
@@ -203,6 +204,17 @@ def outgoing_international( str ):
         return ret
 
     # "Uw overschrijving -- BE80777591050277 Distr. Alabama -- Finances Voidstreet 22 Bus 111 2600 Alabama US Com: +++001/0028/72387+++"
+    pattern = re.compile( "^Uw\xc2\xa0overschrijving -- (\w\w\d+) ([^ ]*) (\d+)\xc2\xa0(\w+)\xc2\xa0(\w+)$" )
+    res = pattern.findall( str )
+    if len(res)==1:
+        ret['account number'] = res[0][0]
+        ret['payee'] = res[0][1]
+        ret['postal code'] = res[0][2]
+        ret['city'] = res[0][3]
+        ret['country'] = res[0][4]
+        return ret
+
+    # "Uw overschrijving -- BE80777591050277 Distr. Alabama -- Finances Voidstreet 22 Bus 111 2600 Alabama US Com: +++001/0028/72387+++"
     pattern = re.compile( "^Uw\xc2\xa0overschrijving -- (\w\w\d+) ([^ ]*) (.*)$" )
     res = pattern.findall( str )
     if len(res)==1:
@@ -215,6 +227,16 @@ def outgoing_international( str ):
     pattern = re.compile( "^Uw\xc2\xa0overschrijving -- (\w\w\d+) ([^ ]*).*$" )
     res = pattern.findall( str )
     if len(res)==1:
+        ret['account number'] = res[0][0]
+        ret['payee'] = res[0][1]
+        return ret
+
+
+    # "Uw overschrijving -- BE42091010100254 ZNA - - BE Com: +++510/9515/61064+++ Valutadatum: 01/01/1900"
+    pattern = re.compile( "^Uw\xc2\xa0overschrijving -- (\w\w\d+) ([^ ]*).*$" )
+    res = pattern.findall( str )
+    if len(res)==1:
+
         ret['account number'] = res[0][0]
         ret['payee'] = res[0][1]
         return ret
@@ -245,7 +267,8 @@ def incoming_transaction( str ):
         return ret
 
     # incoming international
-    pattern = re.compile( "^Overschrijving\xc2\xa0te\xc2\xa0uwen\xc2\xa0gunste -- (\w\w\d+) (.*) Com:\xc2\xa0(.*)" )
+    # Overschrijving\xc2\xa0te\xc2\xa0uwen\xc2\xa0gunste -- BE08737000540213 CAP\xc2\xa0MARIANNE\xc2\xa0CUPERUSSTRAAT\xc2\xa034\xc2\xa02018 ANTWERPEN\xc2\xa0BE
+    pattern = re.compile( "^Overschrijving\xc2\xa0te\xc2\xa0uwen\xc2\xa0gunste -- (\w\w\d+) ([^ \d]*)(\w+\xc2\xa0\d+)\xc2\xa0(\d\d\d\d) (\w+)\xc2\xa0(\w\w) Com:\xc2\xa0(.*)" )
     res = pattern.findall( str )
     if len(res)==1:
         ret['account number'] = res[0][0]
@@ -321,7 +344,10 @@ def direct_debit( message ):
     pattern = re.compile( "^Domicili\xc3\xabring 000-0000000-00 (.*) DOM.\xc2\xa0:\xc2\xa0(\d\d\d-\d\d\d\d\d\d\d-\d\d)\xc2\xa0MED.\xc2\xa0:\xc2\xa0([\w\d]*).*REF.\xc2\xa0:\xc2\xa0(\d\d\d/\d\d\d\d/\d\d\d\d\d)$" )
     res = pattern.findall( message )
     if len(res)>0:
-        ret['payee'], ret['account number'], ret['message'], ret['number'] = res[0]
+        ret['payee'], ret['account number'] = res[0][0:2]
+        if res[0][2]!='':
+            ret['message'] = res[0][2]
+        ret['number'] = res[0][3]
         return ret
     else:
         return None
@@ -340,6 +366,7 @@ def titanium( str ):
     if len(res)==1:
         str = res[0]
     else:
+        raise Exception, "Is not a MasterCard transaction."
         return None
 
     # check if it's a transaction in a foreign currency a la
@@ -355,9 +382,35 @@ def titanium( str ):
         ret['amount'] = amount
         ret['currency'] = res[0][2]
         ret['exchange_rate'] = float(res[0][3]) + float(res[0][4]) / 100.
-        ret['message'] = res[0][5]
+        payee_message = res[0][5]
     else:
-        ret['message'] = str
+        payee_message = str
+
+    # Deutsche Bank Belgi\"e's uses a fixed format for the MasterCard transaction record:
+    # columns    content
+    # 1-25       digits for payee
+    # 26-38      city OR reference number
+    # 38-39      country code
+    # 39ff.      postal code
+
+    # first get rid of the non-breakable spaces and other weird symbols
+    payee_message = payee_message.replace( "\xc2\xa0", " " )
+    payee_message = payee_message.replace( "\xc2\xa3", " " )
+    payee_message = payee_message.replace( "\xc2\xa7", " " )
+
+    #print payee_message
+    # payee with trimmed whitespace
+    ret['payee'] = payee_message[0:25].strip()
+    payee_message[25:37]
+    if payee_message[25].isdigit():
+        ret['phone number'] = payee_message[25:37].strip()
+    else:
+        ret['city'] = payee_message[25:37].strip()
+
+    ret['country'] = payee_message[38:40]
+    pcode = payee_message[40:]
+    if pcode!="N/A":
+        ret['postal code'] = payee_message[40:]
 
     return ret
 # ==============================================================================
