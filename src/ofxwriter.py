@@ -3,10 +3,13 @@
 
 import xml.dom.minidom
 from xml.dom.minidom import Document
-import time
+import datetime
+import re
 
 # ==============================================================================
-def create_ofx( entry ):
+def print_ofx( entries ):
+ 
+    str = []
 
     # instantiate document
     doc = Document()
@@ -24,8 +27,8 @@ def create_ofx( entry ):
     bankacctfrom = doc.createElementNS( None, "BANKACCTFROM" )
     stmtrs.appendChild(bankacctfrom)
 
-    # bank transfer list
-    stmtrs.appendChild( create_ofx_banktranlist(entry) )
+    # add the transaction list
+    stmtrs.appendChild( create_ofx_banktranlist(entries) )
 
     # ledger balance
     ledgerbal = doc.createElementNS( None, "LEDGERBAL" )
@@ -37,13 +40,12 @@ def create_ofx( entry ):
     # date as of
     dtasof = doc.createElementNS( None, "DTASOF" )
     ledgerbal.appendChild(dtasof)
-    dtasof.appendChild( doc.createTextNode("01-01-2010") )
-
+    dtasof.appendChild( doc.createTextNode( datetime.date.today().isoformat() ) )
 
     import xml.dom.ext
     return xml.dom.ext.PrettyPrint(doc)
 # ==============================================================================
-def create_ofx_banktranlist( entry ):
+def create_ofx_banktranlist( entries ):
 
     doc = xml.dom.minidom.Document()
 
@@ -57,10 +59,11 @@ def create_ofx_banktranlist( entry ):
     # end date
     dtend = doc.createElementNS( None, "DTEND" )
     banktranlist.appendChild(dtend)
-    dtend.appendChild( doc.createTextNode("01-01-2100") )
+    dtend.appendChild( doc.createTextNode( datetime.date.today().isoformat() ) )
 
     # loop over the transactions
-    banktranlist.appendChild( create_ofx_transaction( entry ) )
+    for entry in entries:
+        banktranlist.appendChild( create_ofx_transaction( entry ) )
 
     return banktranlist
 # ==============================================================================
@@ -81,13 +84,13 @@ def create_ofx_transaction( entry ):
     # date posted
     dtposted = doc.createElementNS(None, "DTPOSTED")
     stmttrn.appendChild( dtposted )
-    dtposted.appendChild( doc.createTextNode( time.strftime('%Y-%m-%d', entry['date']) ) )
+    dtposted.appendChild( doc.createTextNode( entry['date'].strftime('%Y-%m-%d') ) )
 
     # value date
-    if  entry['value date'] is not None:
+    if entry['value date'] is not None:
         dtavail = doc.createElementNS(None, "DTAVAIL")
         stmttrn.appendChild( dtavail )
-        dtavail.appendChild( doc.createTextNode( time.strftime('%Y-%m-%d', entry['value date']) ) )
+        dtavail.appendChild( doc.createTextNode( entry['value date'].strftime('%Y-%m-%d') ) )
 
     # amount of transaction
     trnamt = doc.createElementNS(None, "TRNAMT")
@@ -97,7 +100,8 @@ def create_ofx_transaction( entry ):
     # unique ID
     fitid = doc.createElementNS(None, "FITID")
     stmttrn.appendChild( fitid )
-    fitid.appendChild( doc.createTextNode( "abc" ) )
+    # for now, create the ID of date, %y%m%d, plus the amount
+    fitid.appendChild( doc.createTextNode( entry['value date'].strftime('%y%m%d') + "%d" % (abs(entry['amount'])*100) ) )
 
     # payee
     stmttrn.appendChild( create_ofx_payee(entry) )
@@ -106,9 +110,10 @@ def create_ofx_transaction( entry ):
     stmttrn.appendChild( create_ofx_bankaccount(entry) )
 
     # memo
-    memo = doc.createElementNS(None, "MEMO")
-    stmttrn.appendChild( memo )
-    memo.appendChild( doc.createTextNode( entry['message'] ) )
+    if entry['message'] is not None:
+        memo = doc.createElementNS(None, "MEMO")
+        stmttrn.appendChild( memo )
+        memo.appendChild( doc.createTextNode( entry['message'] ) )
 
     if entry['currency'] is not None:
         currency = doc.createElementNS(None, "ORIGINALCURRENCY")
@@ -130,15 +135,22 @@ def create_ofx_payee( entry ):
         name.appendChild( doc.createTextNode( entry['payee'] ) )
 
     # address 1
-    addr1 = doc.createElementNS(None, "ADDR1")
+    addr1 = doc.createElementNS( None, "ADDR1" )
     payee.appendChild( addr1 )
     if entry['address'] is not None:
-        addr1.appendChild( doc.createTextNode( entry['address'] ) )
+        if type(entry['address']) == str:
+            addr1.appendChild( doc.createTextNode( entry['address'] ) )
+        elif type(entry['address']) == tuple:
+            for addline in entry['address']:
+                addr1.appendChild( doc.createTextNode( addline ) )
+        else:
+            raise Exception, "Illegal address field, \"" + entry['address'] + "\"."
 
     # city
     city = doc.createElementNS(None, "CITY")
     payee.appendChild( city )
-    city.appendChild( doc.createTextNode( "mycity" ) )
+    if entry['city'] is not None:
+        city.appendChild( doc.createTextNode( entry['city'] ) )
 
     # state (leave empty)
     state = doc.createElementNS( None, "STATE" )
@@ -147,13 +159,16 @@ def create_ofx_payee( entry ):
     # postal code
     postalcode = doc.createElementNS( None, "POSTALCODE" )
     payee.appendChild( postalcode )
-    postalcode.appendChild( doc.createTextNode( "1234" ) )
+    if entry['postal code'] is not None:
+        postalcode.appendChild( doc.createTextNode( entry['postal code'] ) )
 
     # optional: country
 
     # phone
     phone = doc.createElementNS( None, "PHONE" )
     payee.appendChild( phone )
+    if entry['phone number'] is not None:
+        postalcode.appendChild( doc.createTextNode( entry['phone number'] ) )
 
     return payee
 # ==============================================================================
@@ -168,8 +183,12 @@ def create_ofx_bankaccount( entry ):
     if entry['account number'] is not None:
         bank_id_parser = re.compile( "(\d\d\d)-.*" )
         res = bank_id_parser.findall( entry['account number'] )
-        bank_id    = res[0]
-        account_id = entry['account number']
+        if len(res)>0:
+            bank_id    = res[0]
+            account_id = entry['account number']
+        else:
+            bank_id    = ""
+            account_id = entry['account number']
     elif entry['bic'] is not None and entry['iban'] is not None:
         bank_id    = entry['bic']
         account_id = entry['iban']

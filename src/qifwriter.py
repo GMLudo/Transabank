@@ -28,6 +28,11 @@ def print_qif_transaction( entry ):
 
     str = []
 
+    # Do not record credit card clearance;
+    # this is accounted for on the credit card already.
+    if entry['number'] == "Card clearance":
+        return ''
+
     if not entry['date'] is None:
         str.append( "D" + entry['date'].isoformat() )
 
@@ -59,8 +64,10 @@ def print_qif_transaction( entry ):
         if entry['country'] is not None:
             str.append( "A" +  entry['country'] )
 
-    if not entry['message'] is None:
+    if entry['message'] is not None:
         str.append( "M" + entry['message']  )
+    elif entry['location'] is not None:
+        str.append( "M" + entry['location']  )
 
     if not entry['number'] is None:
         str.append( "N" + entry['number']  )

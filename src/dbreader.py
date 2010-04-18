@@ -76,8 +76,8 @@ def process_message_body( message, is_mastercard_transaction ):
             transaction = standing_national( message )
         elif bancontact( message ) is not None:
             transaction = bancontact( message )
-        elif foreign_atm( message ) is not None:
-            transaction = foreign_atm( message )
+        elif atm_international( message ) is not None:
+            transaction = atm_international( message )
         elif standing_international( message ) is not None:
             transaction = standing_international( message )
         elif outgoing_international( message ) is not None:
@@ -142,18 +142,22 @@ def empty_transaction():
              'country': None,
              'message': None,
              'number': None,
+             'mode': None,
              'currency': None,
              'exchange rate': None,
              'location': None,
              'exchange fee': None,
              'payment fee': None,
-             'value date': None }
+             'value date': None,
+             'phone number': None }
 # ==============================================================================
 # Dissect something like
 # Uw overschrijving 410-0659001-06 John Doe Voidstreet 5, 2610 Alabama 080/0163/21631 Valutadatum: 01/01/1900
 def outgoing_national( str ):
 
     ret = empty_transaction()
+
+    ret['mode'] = 'Transfer (national)'
 
     # match account number and address, e.g.,
     # "410-0659001-06 Onafhankelijkxc2\xa0Ziekenfonds Boomsesteenwgxc2\xa05, 2610xc2\xa0Antwerpen"
@@ -201,6 +205,7 @@ def outgoing_international( str ):
         ret['bic'] = res[0][0]
         ret['iban'] = res[0][1]
         ret['payee'] = res[0][2]
+        ret['mode'] = 'Transfer (EU)'
         return ret
 
     # "Uw overschrijving -- BE80777591050277 Distr. Alabama -- Finances Voidstreet 22 Bus 111 2600 Alabama US Com: +++001/0028/72387+++"
@@ -212,6 +217,7 @@ def outgoing_international( str ):
         ret['postal code'] = res[0][2]
         ret['city'] = res[0][3]
         ret['country'] = res[0][4]
+        ret['mode'] = 'Transfer (international)'
         return ret
 
     # "Uw overschrijving -- BE80777591050277 Distr. Alabama -- Finances Voidstreet 22 Bus 111 2600 Alabama US Com: +++001/0028/72387+++"
@@ -221,6 +227,7 @@ def outgoing_international( str ):
         ret['account number'] = res[0][0]
         ret['payee'] = res[0][1]
         ret['address'] = res[0][2]
+        ret['mode'] = 'Transfer (international)'
         return ret
 
     # "Uw overschrijving -- BE42091010100254 ZNA - - BE Com: +++510/9515/61064+++ Valutadatum: 01/01/1900"
@@ -229,6 +236,7 @@ def outgoing_international( str ):
     if len(res)==1:
         ret['account number'] = res[0][0]
         ret['payee'] = res[0][1]
+        ret['mode'] = 'Transfer (international)'
         return ret
 
 
@@ -236,15 +244,15 @@ def outgoing_international( str ):
     pattern = re.compile( "^Uw\xc2\xa0overschrijving -- (\w\w\d+) ([^ ]*).*$" )
     res = pattern.findall( str )
     if len(res)==1:
-
         ret['account number'] = res[0][0]
         ret['payee'] = res[0][1]
+        ret['mode'] = 'Transfer (international)'
         return ret
 
     pattern = re.compile( "^Overschrijving\xc2\xa0naar\xc2\xa0het\xc2\xa0buitenland --$" )
     res = pattern.findall( str )
     if len(res)==1:
-        ret['message'] = "Transfer to foreign country"
+        ret['mode'] = 'Transfer (international)'
         return ret
 
     return None
@@ -294,6 +302,8 @@ def bancontact( message ):
 
     ret = empty_transaction()
 
+    ret['mode'] = 'Bancontact'
+
     # with payee
     pattern = re.compile( "^Bancontact (\d\d\d-\d\d\d\d\d\d\d-\d\d) (.*)\xc2\xa0" )
     results = pattern.findall( message )
@@ -321,7 +331,7 @@ def proton( message ):
     pattern = re.compile( "^Opladen Proton-kaart 610-2011962-79" )
     results = pattern.findall( message )
     if len(results)==1:
-        ret['message'] = "Proton"
+        ret['mode'] = "Proton"
         return ret
 
     return None
@@ -332,7 +342,7 @@ def cards_clearance( message ):
 
     pattern = re.compile( "^Afrekening\xc2\xa0kaarten 666-0000004-83$" )
     if len( pattern.findall( message ) ) > 0:
-        ret['message'] = "Card clearance"
+        ret['mode'] = "Card clearance"
         return ret
 
     return None
@@ -348,6 +358,7 @@ def direct_debit( message ):
         if res[0][2]!='':
             ret['message'] = res[0][2]
         ret['number'] = res[0][3]
+        ret['mode'] = 'Direct debit'
         return ret
     else:
         return None
@@ -356,6 +367,8 @@ def direct_debit( message ):
 # db Titanium Card Nr. 0123 5678 1234 5678 PAYDUDE LUL2240 Aanmaak uitgavenstaat: 01/01/1900  Boekingsdatum: 01/01/1900
 def titanium( str ):
     ret = empty_transaction()
+
+    ret['mode'] = 'Credit card'
 
     # strip useless " Aanmaak uitgavenstaat: 22/02/2010  Boekingsdatum: 01/03/2010"
     str = re.sub( " Aanmaak\xc2\xa0uitgavenstaat:\xc2\xa0\d\d/\d\d/\d\d\d\d\xc2\xa0 Boekingsdatum:\xc2\xa0\d\d/\d\d/\d\d\d\d$", "", str )
@@ -419,6 +432,8 @@ def titanium( str ):
 def standing_national( message ):
     ret = empty_transaction()
 
+    ret['mode'] = 'Standing order'
+
     # pattern *with address
     pattern = re.compile( "Uw\xc2\xa0doorlopende\xc2\xa0opdracht (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^ ]*) STANDING ORDER (\d\d\d\d\d)$" )
     results = pattern.findall( message )
@@ -444,6 +459,7 @@ def standing_international( message ):
     pattern = re.compile( "^Uw\xc2\xa0doorlopende\xc2\xa0opdracht -- (\w\w\w\w\w\w\w\w)\xc2\xa0(\w\w\d\d\xc2\xa0\w\w\w\w\xc2\xa0\d\d\d\d\xc2\xa0\d\d\d\d\xc2\xa0\d*) (.*)$" )
     results = pattern.findall( message )
     if len(results)==1:
+        ret['mode'] = 'Standing order'
         ret['bic'], ret['iban'], ret['payee'] = results[0]
         return ret
 
@@ -451,8 +467,10 @@ def standing_international( message ):
 # ==============================================================================
 # Bancontact Geldopvraging te: DENVER            Datum: 04/04/10 Valutadatum: 01/01/1900
 # Bancontact Geldopvraging te: LONDON            Tegenwaarde:     50,00 GBP Koers: 1 EUR = 0,90220137 GBP Betalingsprovisie: 2,50 EUR Wisselprovisie:  0,83 EUR Datum: 01/01/00 Valutadatum: 01/01/1900
-def foreign_atm( message ):
+def atm_international( message ):
     ret = empty_transaction()
+
+    ret['mode'] = 'ATM (international)'
 
     # in the same currency:
     pattern = re.compile("^Bancontact Geldopvraging\xc2\xa0te:\xc2\xa0(\w*)(.*)")
@@ -483,6 +501,7 @@ def interest( message ):
     res = pattern.findall( message )
 
     if len(res)>0:
+        ret['mode'] = 'Interest -- fees'
         return ret
 
     return None
