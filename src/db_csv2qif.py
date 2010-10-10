@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # ==============================================================================
 #
-# Copyright (C) 2010 Nico Schlömer
+# Copyright (C) 2010 Nico Schl"omer
 #
 # This file is part of deutschebank2ofx.
 #
@@ -24,11 +24,11 @@ import dbreader
 import ofxwriter
 import qifwriter
 # ==============================================================================
-file_name = 'TransactionListHistory-sun.csv'
-delim = ','
+file_name = 'TransactionListHistory-2010.csv'
+delim = '|'
 
 transactions, mc_transactions = dbreader.read_db_cvsfile( file_name, delim )
 
-print qifwriter.print_qif( transactions )
-#print ofxwriter.print_ofx( transactions )
+#print qifwriter.print_qif( transactions )
+print ofxwriter.print_ofx( transactions )
 # ==============================================================================

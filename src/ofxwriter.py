@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # ==============================================================================
 #
-# Copyright (C) 2010 Nico Schlömer
+# Copyright (C) 2010 Nico Schl"omer
 #
 # This file is part of deutschebank2ofx.
 #
@@ -26,8 +26,6 @@ import datetime
 import re
 # ==============================================================================
 def print_ofx( entries ):
- 
-    str = []
 
     # instantiate document
     doc = Document()
@@ -38,8 +36,8 @@ def print_ofx( entries ):
     # add curdef
     currency_element = doc.createElementNS( None, "CURDEF" )
     stmtrs.appendChild(currency_element)
-    c = doc.createTextNode("EUR")
-    currency_element.appendChild(c)
+    c = doc.createTextNode( "EUR" )
+    currency_element.appendChild( c )
 
     # bank account from
     bankacctfrom = doc.createElementNS( None, "BANKACCTFROM" )
@@ -58,10 +56,14 @@ def print_ofx( entries ):
     # date as of
     dtasof = doc.createElementNS( None, "DTASOF" )
     ledgerbal.appendChild(dtasof)
-    dtasof.appendChild( doc.createTextNode( datetime.date.today().isoformat() ) )
+    dtasof.appendChild( doc.createTextNode(
+                            datetime.date.today().isoformat()
+                        )
+                      )
 
+    # install pyxml for this
     import xml.dom.ext
-    return xml.dom.ext.PrettyPrint(doc)
+    return xml.dom.ext.PrettyPrint( doc )
 # ==============================================================================
 def create_ofx_banktranlist( entries ):
 
@@ -94,7 +96,7 @@ def create_ofx_transaction( entry ):
     # decide upon the transaction type
     trntype = doc.createElementNS(None, "TRNTYPE")
     stmttrn.appendChild( trntype )
-    if entry['amount']>0:
+    if entry['amount'] > 0:
         trntype.appendChild( doc.createTextNode("CREDIT") )
     else:
         trntype.appendChild( doc.createTextNode("DEBIT") )
@@ -102,13 +104,19 @@ def create_ofx_transaction( entry ):
     # date posted
     dtposted = doc.createElementNS(None, "DTPOSTED")
     stmttrn.appendChild( dtposted )
-    dtposted.appendChild( doc.createTextNode( entry['date'].strftime('%Y-%m-%d') ) )
+    dtposted.appendChild( doc.createTextNode(
+                              entry['date'].strftime('%Y-%m-%d')
+                          )
+                        )
 
     # value date
     if entry['value date'] is not None:
         dtavail = doc.createElementNS(None, "DTAVAIL")
         stmttrn.appendChild( dtavail )
-        dtavail.appendChild( doc.createTextNode( entry['value date'].strftime('%Y-%m-%d') ) )
+        dtavail.appendChild( doc.createTextNode(
+                                 entry['value date'].strftime('%Y-%m-%d')
+                             )
+                           )
 
     # amount of transaction
     trnamt = doc.createElementNS(None, "TRNAMT")
@@ -119,7 +127,11 @@ def create_ofx_transaction( entry ):
     fitid = doc.createElementNS(None, "FITID")
     stmttrn.appendChild( fitid )
     # for now, create the ID of date, %y%m%d, plus the amount
-    fitid.appendChild( doc.createTextNode( entry['value date'].strftime('%y%m%d') + "%d" % (abs(entry['amount'])*100) ) )
+    fitid.appendChild( doc.createTextNode(
+                           entry['value date'].strftime('%y%m%d')
+                           + "%d" % (abs(entry['amount'])*100)
+                       )
+                     )
 
     # payee
     stmttrn.appendChild( create_ofx_payee(entry) )
@@ -162,7 +174,9 @@ def create_ofx_payee( entry ):
             for addline in entry['address']:
                 addr1.appendChild( doc.createTextNode( addline ) )
         else:
-            raise Exception, "Illegal address field, \"" + entry['address'] + "\"."
+            raise ValueError( "Illegal address field, \""
+                              + entry['address'] + "\"."
+                            )
 
     # city
     city = doc.createElementNS(None, "CITY")
