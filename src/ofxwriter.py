@@ -45,10 +45,10 @@ def print_ofx( entries ):
     balamt.text = "0.00"
 
     # date as of
-    dtasof = etree.SubElement(legderbal, "DTASOF")
+    dtasof = etree.SubElement(ledgerbal, "DTASOF")
     dtasof.text = datetime.date.today().isoformat()
 
-    return etree.tostring( doc,
+    return etree.tostring( stmtrs,
                            pretty_print = True
                          )
 # ==============================================================================
@@ -171,7 +171,7 @@ def _create_ofx_bankaccount( entry ):
     if entry['account number'] is not None:
         bank_id_parser = re.compile( "(\d\d\d)-.*" )
         res = bank_id_parser.findall( entry['account number'] )
-        if len(res)>0:
+        if len(res) > 0:
             bank_id    = res[0]
             account_id = entry['account number']
         else:
