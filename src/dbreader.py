@@ -180,7 +180,8 @@ def _empty_transaction():
              'exchange fee': None,
              'payment fee': None,
              'value date': None,
-             'phone number': None }
+             'phone number': None
+           }
 # ==============================================================================
 # Dissect something like
 # Uw overschrijving 410-0659001-06 John Doe Voidstreet 5, 2610 Alabama 080/0163/21631 Valutadatum: 01/01/1900

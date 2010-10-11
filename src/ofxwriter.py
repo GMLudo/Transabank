@@ -20,197 +20,153 @@
 # along with deutschebank2ofx.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ==============================================================================
-import xml.dom.minidom
-from xml.dom.minidom import Document
 import datetime
 import re
+import lxml.etree as etree
 # ==============================================================================
 def print_ofx( entries ):
 
-    # instantiate document
-    doc = Document()
-
-    stmtrs = doc.createElementNS( None , "STMTRS" )
-    doc.appendChild(stmtrs)
+    stmtrs = etree.Element( "STMTRS" )
 
     # add curdef
-    currency_element = doc.createElementNS( None, "CURDEF" )
-    stmtrs.appendChild(currency_element)
-    c = doc.createTextNode( "EUR" )
-    currency_element.appendChild( c )
+    currency_element = etree.SubElement(stmtrs, "CURDEF")
+    c = etree.SubElement(currency_element, "EUR")
 
     # bank account from
-    bankacctfrom = doc.createElementNS( None, "BANKACCTFROM" )
-    stmtrs.appendChild(bankacctfrom)
+    bankacctfrom = etree.SubElement(stmtrs, "BANKACCTFROM")
 
     # add the transaction list
-    stmtrs.appendChild( create_ofx_banktranlist(entries) )
+    stmtrs.append( _create_ofx_banktranlist(entries) )
 
     # ledger balance
-    ledgerbal = doc.createElementNS( None, "LEDGERBAL" )
-    stmtrs.appendChild( ledgerbal )
+    ledgerbal = etree.SubElement(stmtrs, "LEDGERBAL")
     # amount
-    balamt = doc.createElementNS( None, "BALAMT" )
-    ledgerbal.appendChild(balamt)
-    balamt.appendChild( doc.createTextNode("0.00") )
+    balamt = etree.SubElement(ledgerbal, "BALAMT")
+    balamt.text = "0.00"
+
     # date as of
-    dtasof = doc.createElementNS( None, "DTASOF" )
-    ledgerbal.appendChild(dtasof)
-    dtasof.appendChild( doc.createTextNode(
-                            datetime.date.today().isoformat()
-                        )
-                      )
+    dtasof = etree.SubElement(legderbal, "DTASOF")
+    dtasof.text = datetime.date.today().isoformat()
 
-    # install pyxml for this
-    import xml.dom.ext
-    return xml.dom.ext.PrettyPrint( doc )
+    return etree.tostring( doc,
+                           pretty_print = True
+                         )
 # ==============================================================================
-def create_ofx_banktranlist( entries ):
+def _create_ofx_banktranlist( entries ):
 
-    doc = xml.dom.minidom.Document()
-
-    banktranlist = doc.createElementNS( None, "BANKTRANLIST" )
+    banktranlist = etree.Element( "BANKTRANLIST" )
 
     # start date
-    dtstart = doc.createElementNS( None, "DTSTART" )
-    banktranlist.appendChild(dtstart)
-    dtstart.appendChild( doc.createTextNode("01-01-1900") )
+    dtstart = etree.SubElement( banktranlist, "DTSTART" )
+    dtstart.text = "01-01-1900"
 
     # end date
-    dtend = doc.createElementNS( None, "DTEND" )
-    banktranlist.appendChild(dtend)
-    dtend.appendChild( doc.createTextNode( datetime.date.today().isoformat() ) )
+    dtend = etree.SubElement( banktranlist, "DTEND" )
+    dtend.text = datetime.date.today().isoformat()
 
     # loop over the transactions
     for entry in entries:
-        banktranlist.appendChild( create_ofx_transaction( entry ) )
+        banktranlist.append( _create_ofx_transaction( entry ) )
 
     return banktranlist
 # ==============================================================================
-def create_ofx_transaction( entry ):
+def _create_ofx_transaction( entry ):
 
-    doc = xml.dom.minidom.Document()
-
-    stmttrn = doc.createElementNS(None, "STMTTRN")
+    stmttrn = etree.Element( "STMTTRN" )
 
     # decide upon the transaction type
-    trntype = doc.createElementNS(None, "TRNTYPE")
-    stmttrn.appendChild( trntype )
+    trntype = etree.SubElement( stmttrn, "TRNTYPE" )
     if entry['amount'] > 0:
-        trntype.appendChild( doc.createTextNode("CREDIT") )
+        trntype.text = "CREDIT"
     else:
-        trntype.appendChild( doc.createTextNode("DEBIT") )
+        trntype.text = "DEBIT"
 
     # date posted
-    dtposted = doc.createElementNS(None, "DTPOSTED")
-    stmttrn.appendChild( dtposted )
-    dtposted.appendChild( doc.createTextNode(
-                              entry['date'].strftime('%Y-%m-%d')
-                          )
-                        )
+    dtposted = etree.SubElement( stmttrn, "DTPOSTED" )
+    dtposted.text = entry['date'].strftime('%Y-%m-%d')
 
     # value date
     if entry['value date'] is not None:
-        dtavail = doc.createElementNS(None, "DTAVAIL")
-        stmttrn.appendChild( dtavail )
-        dtavail.appendChild( doc.createTextNode(
-                                 entry['value date'].strftime('%Y-%m-%d')
-                             )
-                           )
+        dtavail = etree.SubElement( stmttrn, "DTAVAIL" )
+        dtavail.text = entry['value date'].strftime('%Y-%m-%d')
+
 
     # amount of transaction
-    trnamt = doc.createElementNS(None, "TRNAMT")
-    stmttrn.appendChild( trnamt )
-    trnamt.appendChild( doc.createTextNode( "%.2f" % entry['amount'] ) )
+    trnamt = etree.SubElement( stmttrn, "TRNAMT" )
+    trnamt.text = "%.2f" % entry['amount']
 
     # unique ID
-    fitid = doc.createElementNS(None, "FITID")
-    stmttrn.appendChild( fitid )
+    fitid = etree.SubElement( stmttrn, "FITID" )
     # for now, create the ID of date, %y%m%d, plus the amount
-    fitid.appendChild( doc.createTextNode(
-                           entry['value date'].strftime('%y%m%d')
-                           + "%d" % (abs(entry['amount'])*100)
-                       )
-                     )
+    fitid.text = entry['value date'].strftime('%y%m%d') \
+               + "%d" % (abs(entry['amount'])*100)
 
     # payee
-    stmttrn.appendChild( create_ofx_payee(entry) )
+    stmttrn.append( _create_ofx_payee(entry) )
 
     # bank account to
-    stmttrn.appendChild( create_ofx_bankaccount(entry) )
+    stmttrn.append( _create_ofx_bankaccount(entry) )
 
     # memo
     if entry['message'] is not None:
-        memo = doc.createElementNS(None, "MEMO")
-        stmttrn.appendChild( memo )
-        memo.appendChild( doc.createTextNode( entry['message'] ) )
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = entry['message']
 
     if entry['currency'] is not None:
-        currency = doc.createElementNS(None, "ORIGINALCURRENCY")
-        stmttrn.appendChild( currency )
-        currency.appendChild( doc.createTextNode( entry['currency'] ) )
+        currency = etree.SubElement( stmttrn, "ORIGINALCURRENCY" )
+        currency.text = entry['currency']
 
     return stmttrn
 # ==============================================================================
-def create_ofx_payee( entry ):
+def _create_ofx_payee( entry ):
 
-    doc = xml.dom.minidom.Document()
-
-    payee = doc.createElementNS(None, "PAYEE")
+    payee = etree.Element( "PAYEE" )
 
     # name
-    name = doc.createElementNS(None, "NAME")
-    payee.appendChild( name )
+    name = etree.SubElement( payee, "NAME" )
     if entry['payee'] is not None:
-        name.appendChild( doc.createTextNode( entry['payee'] ) )
+        name.text = entry['payee']
 
     # address 1
-    addr1 = doc.createElementNS( None, "ADDR1" )
-    payee.appendChild( addr1 )
+    addr1 = etree.SubElement( payee, "ADDR1" )
     if entry['address'] is not None:
         if type(entry['address']) == str:
-            addr1.appendChild( doc.createTextNode( entry['address'] ) )
+            addr1.text = entry['address']
         elif type(entry['address']) == tuple:
             for addline in entry['address']:
-                addr1.appendChild( doc.createTextNode( addline ) )
+                addr1.text = addline
         else:
             raise ValueError( "Illegal address field, \""
                               + entry['address'] + "\"."
                             )
 
     # city
-    city = doc.createElementNS(None, "CITY")
-    payee.appendChild( city )
+    city = etree.SubElement( payee, "CITY" )
     if entry['city'] is not None:
-        city.appendChild( doc.createTextNode( entry['city'] ) )
+        city.text = entry['city']
 
     # state (leave empty)
-    state = doc.createElementNS( None, "STATE" )
-    payee.appendChild( state )
+    state = etree.SubElement( payee, "STATE" )
 
     # postal code
-    postalcode = doc.createElementNS( None, "POSTALCODE" )
-    payee.appendChild( postalcode )
+    postalcode = etree.SubElement( payee, "POSTALCODE" )
     if entry['postal code'] is not None:
-        postalcode.appendChild( doc.createTextNode( entry['postal code'] ) )
+        postalcode.text = entry['postal code']
 
     # optional: country
 
     # phone
-    phone = doc.createElementNS( None, "PHONE" )
-    payee.appendChild( phone )
+    phone = etree.SubElement( payee, "PHONE" )
     if entry['phone number'] is not None:
-        postalcode.appendChild( doc.createTextNode( entry['phone number'] ) )
+        phone.text = entry['phone number']
 
     return payee
 # ==============================================================================
-def create_ofx_bankaccount( entry ):
-
-    doc = xml.dom.minidom.Document()
+def _create_ofx_bankaccount( entry ):
 
     tofrom = "BANKACCTTO"
 
-    bankacct = doc.createElementNS( None, tofrom )
+    bankacct = etree.Element( tofrom )
 
     if entry['account number'] is not None:
         bank_id_parser = re.compile( "(\d\d\d)-.*" )
@@ -230,20 +186,17 @@ def create_ofx_bankaccount( entry ):
 
     # TODO: extract first three items off of account number
     # bank ID
-    bankid = doc.createElementNS( None, "BANKID" )
-    bankacct.appendChild( bankid )
-    bankid.appendChild( doc.createTextNode( bank_id ) )
+    bankid = etree.SubElement( bankacct, "BANKID" )
+    bankid.text = bank_id
 
     # account ID
-    acctid = doc.createElementNS( None, "ACCTID" )
-    bankacct.appendChild( acctid )
-    acctid.appendChild( doc.createTextNode( account_id ) )
+    acctid = etree.SubElement( bankacct, "ACCTID" )
+    acctid.text = account_id
 
     # account type;
     # one of CHECKING, SAVINGS, MONEYMRKT, CREDITLINE
-    accttype = doc.createElementNS( None, "ACCTTYPE" )
-    bankacct.appendChild( accttype )
-    accttype.appendChild( doc.createTextNode( "CHECKING" ) )
+    accttype = etree.SubElement( bankacct, "ACCTTYPE" )
+    accttype.text = "CHECKING"
 
     return bankacct
 # ==============================================================================
