@@ -110,7 +110,7 @@ def _create_ofx_transaction( entry ):
     # memo
     if entry['message'] is not None:
         memo = etree.SubElement( stmttrn, "MEMO" )
-        memo.text = entry['message']
+        memo.text = _clean_string( entry['message'] )
 
     if entry['currency'] is not None:
         currency = etree.SubElement( stmttrn, "ORIGINALCURRENCY" )
@@ -125,16 +125,16 @@ def _create_ofx_payee( entry ):
     # name
     name = etree.SubElement( payee, "NAME" )
     if entry['payee'] is not None:
-        name.text = entry['payee']
+        name.text = _clean_string( entry['payee'] )
 
     # address 1
     addr1 = etree.SubElement( payee, "ADDR1" )
     if entry['address'] is not None:
         if type(entry['address']) == str:
-            addr1.text = entry['address']
+            addr1.text = _clean_string( entry['address'] )
         elif type(entry['address']) == tuple:
             for addline in entry['address']:
-                addr1.text = addline
+                addr1.text = _clean_string( addline )
         else:
             raise ValueError( "Illegal address field, \""
                               + entry['address'] + "\"."
@@ -191,7 +191,7 @@ def _create_ofx_bankaccount( entry ):
 
     # account ID
     acctid = etree.SubElement( bankacct, "ACCTID" )
-    acctid.text = account_id
+    acctid.text = _clean_string( account_id )
 
     # account type;
     # one of CHECKING, SAVINGS, MONEYMRKT, CREDITLINE
@@ -199,4 +199,7 @@ def _create_ofx_bankaccount( entry ):
     accttype.text = "CHECKING"
 
     return bankacct
+# ==============================================================================
+def _clean_string( string ):
+    return string.replace( '\xa0', ' ' )
 # ==============================================================================
