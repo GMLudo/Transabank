@@ -39,7 +39,7 @@ def print_qif( entries ):
     # loop over all entries
     for entry in entries:
         str.append( print_qif_transaction(entry) )
-   
+
     return "\n".join(str)
 # ==============================================================================
 def print_qif_transaction( entry ):

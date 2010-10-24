@@ -20,20 +20,57 @@
 # along with deutschebank2ofx.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ==============================================================================
+'''
+Writes the data in OFX format according to the specification at
+http://www.ofx.net/DownloadPage/Downloads.aspx
+'''
 import datetime
 import re
 import lxml.etree as etree
 # ==============================================================================
 def print_ofx( entries ):
 
-    stmtrs = etree.Element( "STMTRS" )
+    ofx = etree.Element( "OFX" )
+
+    # imitate sign-on sequence
+    signonmsgsrsv1 = etree.SubElement( ofx, "SIGNONMSGSRSV1" )
+    sonrs = etree.SubElement( signonmsgsrsv1, "SONRS" )
+    status = etree.SubElement( sonrs, "STATUS" )
+    code = etree.SubElement( status, "CODE" )
+    code.text = "0" # SUCCESS
+    severity = etree.SubElement( status, "SEVERITY" )
+    severity.text = "INFO"
+    dtserver = etree.SubElement( sonrs, "DTSERVER" )
+    dtserver.text = datetime.datetime.now().strftime( "%Y%m%d%H%M%S" )
+    language = etree.SubElement( sonrs, "LANGUAGE" )
+    language.text = "ENG"
+
+    bankmsgsrsv1 = etree.SubElement( ofx, "BANKMSGSRSV1" )
+
+    # see OFX 2.1.1 standard page 317
+    stmttrnrs = etree.SubElement( bankmsgsrsv1, "STMTTRNRS" )
+    trnuid = etree.SubElement( stmttrnrs, "TRNUID" )
+    trnuid.text = "1001" # dummy user ID
+    status = etree.SubElement( stmttrnrs, "STATUS" )
+    code = etree.SubElement( status, "CODE" )
+    code.text = "0" # SUCCESS
+    severity = etree.SubElement( status, "SEVERITY" )
+    severity.text = "INFO"
+
+    stmtrs = etree.SubElement( stmttrnrs, "STMTRS" )
 
     # add curdef
     currency_element = etree.SubElement(stmtrs, "CURDEF")
-    c = etree.SubElement(currency_element, "EUR")
+    currency_element.text = "EUR"
 
     # bank account from
     bankacctfrom = etree.SubElement(stmtrs, "BANKACCTFROM")
+    bankid = etree.SubElement(bankacctfrom, "BANKID")
+    bankid.text = "610"
+    acctid = etree.SubElement(bankacctfrom, "ACCTID")
+    acctid.text = "610-0000000-00"
+    accttype = etree.SubElement(bankacctfrom, "ACCTTYPE")
+    accttype.text = "CHECKING"
 
     # add the transaction list
     stmtrs.append( _create_ofx_banktranlist(entries) )
@@ -46,9 +83,9 @@ def print_ofx( entries ):
 
     # date as of
     dtasof = etree.SubElement(ledgerbal, "DTASOF")
-    dtasof.text = datetime.date.today().isoformat()
+    dtasof.text = datetime.datetime.now().strftime( "%Y%m%d%H%M%S" )
 
-    return etree.tostring( stmtrs,
+    return etree.tostring( ofx,
                            pretty_print = True
                          )
 # ==============================================================================
@@ -58,11 +95,11 @@ def _create_ofx_banktranlist( entries ):
 
     # start date
     dtstart = etree.SubElement( banktranlist, "DTSTART" )
-    dtstart.text = "01-01-1900"
+    dtstart.text = "19000101000000"
 
     # end date
     dtend = etree.SubElement( banktranlist, "DTEND" )
-    dtend.text = datetime.date.today().isoformat()
+    dtend.text = datetime.datetime.now().strftime( "%Y%m%d%H%M%S" )
 
     # loop over the transactions
     for entry in entries:
@@ -83,12 +120,12 @@ def _create_ofx_transaction( entry ):
 
     # date posted
     dtposted = etree.SubElement( stmttrn, "DTPOSTED" )
-    dtposted.text = entry['date'].strftime('%Y-%m-%d')
+    dtposted.text = entry['date'].strftime( "%Y%m%d%H%M%S" )
 
     # value date
     if entry['value date'] is not None:
         dtavail = etree.SubElement( stmttrn, "DTAVAIL" )
-        dtavail.text = entry['value date'].strftime('%Y-%m-%d')
+        dtavail.text = entry['value date'].strftime( "%Y%m%d%H%M%S" )
 
 
     # amount of transaction
@@ -120,47 +157,63 @@ def _create_ofx_transaction( entry ):
 # ==============================================================================
 def _create_ofx_payee( entry ):
 
-    payee = etree.Element( "PAYEE" )
+    # if we only have the name anyway, then use NAME; otherwise PAYEE
+    # TODO Only take the name for now. This is for a bug in Skrooge that makes
+    #      it impossible to to import from PAYEE.
+    if False:
+      #entry['address'] is not None \
+       #or entry['city'] is not None \
+       #or entry['postal code'] is not None:
+        # ----------------------------------------------------------------------
+        payee = etree.Element( "PAYEE" )
 
-    # name
-    name = etree.SubElement( payee, "NAME" )
-    if entry['payee'] is not None:
-        name.text = _clean_string( entry['payee'] )
+        # name
+        name = etree.SubElement( payee, "NAME" )
+        if entry['payee'] is not None:
+            name.text = _clean_string( entry['payee'] )
 
-    # address 1
-    addr1 = etree.SubElement( payee, "ADDR1" )
-    if entry['address'] is not None:
-        if type(entry['address']) == str:
-            addr1.text = _clean_string( entry['address'] )
-        elif type(entry['address']) == tuple:
-            for addline in entry['address']:
-                addr1.text = _clean_string( addline )
-        else:
-            raise ValueError( "Illegal address field, \""
-                              + entry['address'] + "\"."
-                            )
+        # address 1
+        addr1 = etree.SubElement( payee, "ADDR1" )
+        if entry['address'] is not None:
+            if type(entry['address']) == str:
+                addr1.text = _clean_string( entry['address'] )
+            elif type(entry['address']) == tuple:
+                for addline in entry['address']:
+                    addr1.text = _clean_string( addline )
+            else:
+                raise ValueError( "Illegal address field, \""
+                                  + entry['address'] + "\"."
+                                )
 
-    # city
-    city = etree.SubElement( payee, "CITY" )
-    if entry['city'] is not None:
-        city.text = entry['city']
+        # city
+        city = etree.SubElement( payee, "CITY" )
+        if entry['city'] is not None:
+            city.text = entry['city']
 
-    # state (leave empty)
-    state = etree.SubElement( payee, "STATE" )
+        # state (leave empty)
+        state = etree.SubElement( payee, "STATE" )
 
-    # postal code
-    postalcode = etree.SubElement( payee, "POSTALCODE" )
-    if entry['postal code'] is not None:
-        postalcode.text = entry['postal code']
+        # postal code
+        postalcode = etree.SubElement( payee, "POSTALCODE" )
+        if entry['postal code'] is not None:
+            postalcode.text = entry['postal code']
 
-    # optional: country
+        # optional: country
 
-    # phone
-    phone = etree.SubElement( payee, "PHONE" )
-    if entry['phone number'] is not None:
-        phone.text = entry['phone number']
+        # phone
+        phone = etree.SubElement( payee, "PHONE" )
+        if entry['phone number'] is not None:
+            phone.text = entry['phone number']
 
-    return payee
+        return payee
+        # ----------------------------------------------------------------------
+    else:
+        # ----------------------------------------------------------------------
+        name = etree.Element( "NAME" )
+        if entry['payee'] is not None:
+            name.text = _clean_string( entry['payee'] )
+        return name
+        # ----------------------------------------------------------------------
 # ==============================================================================
 def _create_ofx_bankaccount( entry ):
 
