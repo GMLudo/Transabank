@@ -113,7 +113,38 @@ def _create_ofx_transaction( entry ):
 
     # decide upon the transaction type
     trntype = etree.SubElement( stmttrn, "TRNTYPE" )
-    if entry['amount'] > 0:
+    if entry['mode'] == 'Interest -- fees':
+        trntype.text = "INT"
+        # date posted
+        dtposted = etree.SubElement( stmttrn, "DTPOSTED" )
+        dtposted.text = entry['date'].strftime( "%Y%m%d%H%M%S" )
+        # amount of transaction
+        trnamt = etree.SubElement( stmttrn, "TRNAMT" )
+        trnamt.text = "%.2f" % entry['amount']
+        # unique ID
+        fitid = etree.SubElement( stmttrn, "FITID" )
+        # for now, create the ID of date, %y%m%d, plus the amount
+        fitid.text = entry['value date'].strftime('%y%m%d') \
+                  + "%d" % (abs(entry['amount'])*100)
+        return stmttrn
+    elif entry['mode'] == 'ATM (international)':
+        trntype.text = "ATM"
+        # date posted
+        dtposted = etree.SubElement( stmttrn, "DTPOSTED" )
+        dtposted.text = entry['date'].strftime( "%Y%m%d%H%M%S" )
+        # amount of transaction
+        trnamt = etree.SubElement( stmttrn, "TRNAMT" )
+        trnamt.text = "%.2f" % entry['amount']
+        # unique ID
+        fitid = etree.SubElement( stmttrn, "FITID" )
+        # for now, create the ID of date, %y%m%d, plus the amount
+        fitid.text = entry['value date'].strftime('%y%m%d') \
+                  + "%d" % (abs(entry['amount'])*100)
+        if entry['currency'] is not None:
+            currency = etree.SubElement( stmttrn, "ORIGINALCURRENCY" )
+            currency.text = entry['currency']
+        return stmttrn
+    elif entry['amount'] > 0:
         trntype.text = "CREDIT"
     else:
         trntype.text = "DEBIT"
@@ -121,12 +152,6 @@ def _create_ofx_transaction( entry ):
     # date posted
     dtposted = etree.SubElement( stmttrn, "DTPOSTED" )
     dtposted.text = entry['date'].strftime( "%Y%m%d%H%M%S" )
-
-    # value date
-    if entry['value date'] is not None:
-        dtavail = etree.SubElement( stmttrn, "DTAVAIL" )
-        dtavail.text = entry['value date'].strftime( "%Y%m%d%H%M%S" )
-
 
     # amount of transaction
     trnamt = etree.SubElement( stmttrn, "TRNAMT" )
@@ -137,6 +162,11 @@ def _create_ofx_transaction( entry ):
     # for now, create the ID of date, %y%m%d, plus the amount
     fitid.text = entry['value date'].strftime('%y%m%d') \
                + "%d" % (abs(entry['amount'])*100)
+
+    # value date
+    if entry['value date'] is not None:
+        dtavail = etree.SubElement( stmttrn, "DTAVAIL" )
+        dtavail.text = entry['value date'].strftime( "%Y%m%d%H%M%S" )
 
     # payee
     stmttrn.append( _create_ofx_payee(entry) )
