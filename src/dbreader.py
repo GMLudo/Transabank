@@ -87,7 +87,15 @@ def _process_message_body( message, is_mastercard_transaction ):
         transaction = _titanium( message )
     else:
         # handle regular transaction
-        if _proton(message) is not None:
+        if _cash_withdrawal( message ) is not None:
+            transaction = _cash_withdrawal( message )
+        elif _repayment( message ) is not None:
+            transaction = _repayment( message )
+        elif _foreign_exchanges( message ) is not None:
+            transaction = _foreign_exchanges( message )
+        elif _clearance( message ) is not None:
+            transaction = _clearance( message )
+        elif _proton(message) is not None:
             transaction = _proton( message )
         elif _interest(message) is not None:
             transaction = _interest( message )
@@ -174,6 +182,7 @@ def _empty_transaction():
              'message': None,
              'number': None,
              'mode': None,
+             'foreign amount': None,
              'currency': None,
              'exchange rate': None,
              'location': None,
@@ -270,7 +279,6 @@ def _outgoing_international( message ):
         ret['payee'] = res[0][1]
         ret['mode'] = 'Transfer (international)'
         return ret
-
 
     # "Uw overschrijving -- BE42091010100254 ZNA - - BE Com: +++510/9515/61064+++ Valutadatum: 01/01/1900"
     pattern = re.compile( "^Uw\xa0overschrijving -- (\w\w\d+) ([^ ]*).*$" )
@@ -389,6 +397,76 @@ def _check( message ):
 
     if len(res) > 0:
         ret[ 'mode' ] = 'Check'
+        return ret
+
+    return None
+# ==============================================================================
+# Dissect something like
+# Diverse verrichtingen -- TERUGBETALING
+def _repayment( message ):
+
+    ret = _empty_transaction()
+
+    pattern = re.compile( "^Diverse\xa0verrichtingen -- TERUGBETALING" )
+    results = pattern.findall( message )
+    if len(results)==1:
+        ret[ 'mode' ] = "Repayment"
+        return ret
+
+    return None
+# ==============================================================================
+# Dissect something like
+# Uw verkoop vreemde bankbiljetten -- Valutadatum: 20/09/2010
+def _foreign_exchanges( message ):
+
+    ret = _empty_transaction()
+
+    pattern = re.compile( "^Uw\xa0verkoop\xa0vreemde\xa0bankbiljetten --" )
+    results = pattern.findall( message )
+    if len(results)==1:
+        ret[ 'mode' ] = "Foreign exchanges"
+        return ret
+
+    return None
+# ==============================================================================
+# Dissect something like
+# Afrekening kaarten 666-0000004-83 Valutadatum: 01/03/2010
+def _clearance( message ):
+
+    ret = _empty_transaction()
+
+    pattern = re.compile( "^Afrekening\xa0kaarten \d\d\d-\d\d\d\d\d\d\d-\d\d" )
+    results = pattern.findall( message )
+    if len(results)==1:
+        ret[ 'mode' ] = "Cards clearance"
+        return ret
+
+    return None
+# ==============================================================================
+# Dissect something like
+# Opneming van contanten -- Valutadatum: 20/09/2010
+def _cash_withdrawal( message ):
+
+    ret = _empty_transaction()
+
+    pattern = re.compile( "^Opneming\xa0van\xa0contanten" )
+    results = pattern.findall( message )
+    if len(results) == 1:
+        ret[ 'mode' ] = "Cash withdrawal"
+        return ret
+
+    return None
+# ==============================================================================
+# Dissect something like
+# Opladen Proton-kaart 012-1234567-89 Valutadatum: 01/01/1900
+def _proton( message ):
+
+    ret = _empty_transaction()
+
+    pattern = re.compile( "^Opladen\xa0Proton-kaart \d\d\d-\d\d\d\d\d\d\d-\d\d" )
+    results = pattern.findall( message )
+    if len(results)==1:
+        ret[ 'mode' ] = "Proton"
         return ret
 
     return None
@@ -543,21 +621,41 @@ def _atm_international( message ):
 
     ret['mode'] = 'ATM (international)'
 
-    # in the same currency:
-    pattern = re.compile("^Bancontact Geldopvraging\xa0te:\xa0(\w*)(.*)")
-    res = pattern.findall( message )
-    if len(res)>0:
-        ret['location'] = res[0][0]
+    # Split the message by spaces (not \xa0's and the like).
+    split_message = message.split( " " )
 
-        # _check for foreign currency in the remainder
-        pattern = re.compile( "Tegenwaarde:[\xa0]+(\d+),(\d\d)\xa0(\w+) Koers:\xa01\xa0EUR\xa0=\xa0(\d+),(\d+)\xa0\w+ Betalingsprovisie:\xa0(\d+),(\d+)\xa0\w+ Wisselprovisie:\xa0\xa0(\d+),(\d+)\xa0\w+ (.*)")
-        res = pattern.findall( res[0][1] )
-        if len(res)>0:
-            ret['amount'] = float(res[0][0]) + float(res[0][1]) / 100.
-            ret['currency'] = res[0][2]
-            ret['exchange rate'] = float(res[0][3]) + float(res[0][4]) * 10**(-len(res[0][4]))
-            ret['payment fee'] = float(res[0][5]) + float(res[0][6]) * 10**(-len(res[0][6]))
-            ret['exchange fee'] = float(res[0][7]) + float(res[0][8]) * 10**(-len(res[0][8]))
+    pattern = re.compile("^Geldopvraging\xa0te:\xa0(.*)")
+    res = pattern.findall( split_message[1] )
+    if split_message[0] == "Bancontact" and len(res) > 0:
+
+        # 'Bancontact', location, date information present
+        ret['location'] = res[0].replace('\xa0'," ").strip()
+
+        if len(split_message) >= 6: # foreign currency information present
+            # Get value.
+            pattern = re.compile( "Tegenwaarde:[\xa0]+(\d+),(\d\d)\xa0(\w+)")
+            res = pattern.findall( split_message[2] )
+            if len(res) > 0:
+                ret['foreign amount'] = float(res[0][0]) + float(res[0][1]) / 100.
+                ret['currency'] = res[0][2]
+
+            # Get exchange rate.
+            pattern = re.compile( "Koers:\xa01\xa0EUR\xa0=\xa0+(\d+),(\d+)\xa0\w+")
+            res = pattern.findall( split_message[3] )
+            if len(res) > 0:
+                ret['exchange rate'] = float(res[0][0]) + float(res[0][1]) * 10**(-len(res[0][1]))
+
+            # Get payment fee.
+            pattern = re.compile( "Betalingsprovisie:\xa0(\d+),(\d+)\xa0\w+")
+            res = pattern.findall( split_message[4] )
+            if len(res) > 0:
+                ret['payment fee'] = float(res[0][0]) + float(res[0][1]) * 10**(-len(res[0][1]))
+
+            # Get exchange fee.
+            pattern = re.compile( "Wisselprovisie:\xa0\xa0(\d+),(\d+)\xa0\w+")
+            res = pattern.findall( split_message[5] )
+            if len(res) > 0:
+                ret['exchange fee'] = float(res[0][0]) + float(res[0][1]) * 10**(-len(res[0][1]))
 
         return ret
     else:

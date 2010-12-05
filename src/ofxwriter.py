@@ -103,7 +103,9 @@ def _create_ofx_banktranlist( entries ):
 
     # loop over the transactions
     for entry in entries:
-        banktranlist.append( _create_ofx_transaction( entry ) )
+        transaction = _create_ofx_transaction( entry )
+        if transaction is not None:
+            banktranlist.append( transaction )
 
     return banktranlist
 # ==============================================================================
@@ -113,7 +115,10 @@ def _create_ofx_transaction( entry ):
 
     # decide upon the transaction type
     trntype = etree.SubElement( stmttrn, "TRNTYPE" )
-    if entry['mode'] == 'Interest -- fees':
+    if entry['mode'] == 'Cards clearance':
+        # Don't take into account the cards clearance transactions.
+        return None
+    elif entry['mode'] == 'Interest -- fees':
         trntype.text = "INT"
         # date posted
         dtposted = etree.SubElement( stmttrn, "DTPOSTED" )
@@ -126,7 +131,34 @@ def _create_ofx_transaction( entry ):
         # for now, create the ID of date, %y%m%d, plus the amount
         fitid.text = entry['value date'].strftime('%y%m%d') \
                   + "%d" % (abs(entry['amount'])*100)
+
+        # Add a memo.
+        # This is actually not necessary as this info is already
+        # contained in the trntype. However, this is not processed
+        # properly by Skrooge.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "Interest/costs"
         return stmttrn
+    elif entry['mode'] == 'Foreign exchanges':
+        # Add artificial message.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "Foreign exchanges"
+    elif entry['mode'] == 'Proton':
+        # Add artificial message.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "Load Proton card"
+    elif entry['mode'] == 'Repayment':
+        # Add artificial message.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "Repayment"
+    elif entry['mode'] == 'Transfer (international)':
+        # Add artificial message.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "International transfer"
+    elif entry['mode'] == 'Cash withdrawal':
+        # Add artificial message.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "Cash withdrawal"
     elif entry['mode'] == 'ATM (international)':
         trntype.text = "ATM"
         # date posted
@@ -143,6 +175,12 @@ def _create_ofx_transaction( entry ):
         if entry['currency'] is not None:
             currency = etree.SubElement( stmttrn, "ORIGINALCURRENCY" )
             currency.text = entry['currency']
+
+        # Add a helpful memo
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "International ATM withdrawal in " + entry['location']
+        if entry['foreign amount'] is not None and entry['currency'] is not None:
+           memo.text += " (" + str(entry['foreign amount']) + entry['currency'] + ")"
         return stmttrn
     elif entry['amount'] > 0:
         trntype.text = "CREDIT"
