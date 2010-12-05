@@ -304,21 +304,22 @@ def _incoming_transaction( message ):
     ret = _empty_transaction()
 
     # incoming national
-    pattern = re.compile( "^(Overschrijving\xa0te\xa0uwen\xa0gunste) (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), ([^ ]*) (.*)" )
+    pattern = re.compile( "^Overschrijving\xa0te\xa0uwen\xa0gunste (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), ([^ ]*) (.*)" )
     res = pattern.findall( message )
     if len(res) == 1:
         # no manual transaction
-        ret['account number'] = res[0][1]
-        ret['payee'] = res[0][2]
-        ret['address'] = res[0][3:5]
-        ret['message'] = res[0][5]
+        ret['account number'] = res[0][0]
+        ret['payee'] = res[0][1]
+        ret['address'] = res[0][2:4]
+        ret['message'] = res[0][4]
         return ret
 
     # incoming international
-    # Overschrijving\xa0te\xa0uwen\xa0gunste -- BE08737000540213 CAP\xa0MARIANNE\xa0CUPERUSSTRAAT\xa034\xa02018 ANTWERPEN\xa0BE
-    pattern = re.compile( "^Overschrijving\xa0te\xa0uwen\xa0gunste -- (\w\w\d+) ([^ \d]*)(\w+\xa0\d+)\xa0(\d\d\d\d) (\w+)\xa0(\w\w) Com:\xa0(.*)" )
+    # Overschrijving\xa0te\xa0uwen\xa0gunste -- BE08737000540213 CAP\xa0MARIANNE\xa0CUPERUSSTRAAT\xa034\xa02018 ANTWERPEN\xa0BE Com:\xa0INTERNET
+    split_message = message.split(' ')
+    pattern = re.compile( "^Overschrijving\xa0te\xa0uwen\xa0gunste -- (\w\w\d+) ([^ ]*\d\d\d\d \w+\xa0\w\w) Com:\xa0(.*)" )
     res = pattern.findall( message )
-    if len(res)==1:
+    if len(res) == 1:
         ret['account number'] = res[0][0]
         ret['payee'] = res[0][1]
         ret['message'] = res[0][2]

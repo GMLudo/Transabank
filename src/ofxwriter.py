@@ -159,6 +159,10 @@ def _create_ofx_transaction( entry ):
         # Add artificial message.
         memo = etree.SubElement( stmttrn, "MEMO" )
         memo.text = "Cash withdrawal"
+    elif entry['mode'] == 'Check':
+        # Add artificial message.
+        memo = etree.SubElement( stmttrn, "MEMO" )
+        memo.text = "Check"
     elif entry['mode'] == 'ATM (international)':
         trntype.text = "ATM"
         # date posted
