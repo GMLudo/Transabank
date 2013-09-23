@@ -20,13 +20,18 @@
 # along with deutschebank2ofx.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ==============================================================================
+import logging
+from pprint import pprint
 import datetime # for handling date strings
 import re
 import csv
 # ==============================================================================
 # Read a CSV file and return parsed lists of transaction of the regular account
 # and transactions of the MasterCard account.
-def read_db_cvsfile( file_name, delim = "," ):
+
+LOGGER = logging.getLogger(__name__)
+
+def read_db_csvfile( file_name, delim = "|" ):
 
     # read the file
     db_reader = csv.reader( open(file_name), delimiter=delim )
@@ -34,18 +39,37 @@ def read_db_cvsfile( file_name, delim = "," ):
     transactions = []
     mc_transactions = []
     for row in db_reader:
+        LOGGER.debug("row: %r", row)
         # skip empty rows
         if not row:
             continue
-        transaction, is_mastercard_transaction = _process_db_cvs_entry( row )
-        if is_mastercard_transaction:
-            mc_transactions.append( transaction )
+        if row[1].startswith("D\xe9compte\xa0des\xa0d\xe9penses:\xa0carte\xa0de\xa0cr\xe9dit "):
+            LOGGER.debug('"DÃ©compte\xa0des\xa0dÃ©penses" line dropped.')
         else:
-            transactions.append( transaction )
+            transaction, is_mastercard_transaction = _process_db_csv_entry( row )
+            if is_mastercard_transaction:
+                mc_transactions.append( _clean_transaction(transaction) )
+                #LOGGER.debug("mastercard transaction: %r", transaction)
+            else:
+                transactions.append( _clean_transaction(transaction) )
+                #LOGGER.debug("transaction: %r", transaction)
+            #pprint(transaction)
 
     return transactions, mc_transactions
 # ==============================================================================
-def _process_db_cvs_entry( row ):
+def _clean_transaction(obj):
+    if isinstance(obj, basestring):
+        return obj.strip().replace('\xa0', ' ')
+    elif isinstance(obj, list):
+        return [_clean_transaction(o) for o in obj]
+    elif isinstance(obj, tuple):
+        return tuple(_clean_transaction(o) for o in obj)
+    elif isinstance(obj, dict):
+        return dict((k, _clean_transaction(v)) for (k,v) in obj.items())
+    else:
+        return obj
+# ==============================================================================
+def _process_db_csv_entry( row ):
 
     # Decode the columns.
     # This is DB Belgi\"e-specific.
@@ -125,6 +149,9 @@ def _process_message_body( message, is_mastercard_transaction ):
             transaction = _currency_import( message )
         elif _check( message ) is not None:
             transaction = _check( message )
+        elif _transfer_cancelled( message ) is not None:
+            transaction = _transfer_cancelled( message )
+
         else:
             transaction = None
             raise ValueError( "Could not decode entry \""
@@ -156,15 +183,16 @@ def _get_amount( raw_amount ):
 def _extract_value_date( message ):
 
     # get value date
-    valuta_pattern = re.compile( ".* Valutadatum:\xa0(\d\d/\d\d/\d\d\d\d).*" )
+    valuta_pattern = re.compile( ".* (Valutadatum|Date\xa0valeur):\xa0(\d\d/\d\d/\d\d\d\d).*" )
     valdate = valuta_pattern.findall( message )
+
     if len(valdate) > 0:
-        value_date = datetime.datetime.strptime( valdate[0], "%d/%m/%Y" ).date()
+        value_date = datetime.datetime.strptime( valdate[0][1], "%d/%m/%Y" ).date()
     else:
         value_date = None
 
     # strip "Valutadatum: xx/xx/xxxx"
-    message = re.sub( " Valutadatum:\xa0\d\d/\d\d/\d\d\d\d", "", message )
+    message = re.sub( " (Valutadatum|Date\xa0valeur):\xa0\d\d/\d\d/\d\d\d\d", "", message )
 
     return message, value_date
 # ==============================================================================
@@ -202,7 +230,7 @@ def _outgoing_national( message ):
 
     # match account number and address, e.g.,
     # "410-0659001-06 Onafhankelijkxc2\xa0Ziekenfonds Boomsesteenwgxc2\xa05, 2610xc2\xa0Antwerpen"
-    pattern = re.compile( "^Uw\xa0overschrijving (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), (\d\d\d\d) (\w*) (.*)" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), (\d\d\d\d) (\w*) (.*)" )
     res = pattern.findall( message )
     if len(res) == 1:
         ret['account number'] = res[0][0]
@@ -215,7 +243,7 @@ def _outgoing_national( message ):
 
     # without address, e.g.
     # "Uw overschrijving 310-1610249-38 Doe Inc. 1342235809 Valutadatum: 01/01/1900"
-    pattern = re.compile( "^Uw\xa0overschrijving (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) (\d+).*" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) (\d+).*" )
     res = pattern.findall( message )
     if len(res) == 1:
         ret['account number'] = res[0][0]
@@ -240,52 +268,52 @@ def _outgoing_international( message ):
 
     # match account number and address, e.g.
     # "410-0659001-06 Johnxc2\xa0Doe Voidstreetxc2\xa05, 2610xc2\xa0Alabama"
-    pattern = re.compile( "^Uw\xa0overschrijving -- ([^ ]*) (\w\w\d\d\xa0\w\w\w\w\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d*)\xa0(.*)" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) -- ([^ ]*) (\w\w\d\d\xa0\w\w\w\w\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d*)\xa0(.*)" )
     res = pattern.findall( message )
     if len(res)==1:
-        ret['bic'] = res[0][0]
-        ret['iban'] = res[0][1]
-        ret['payee'] = res[0][2]
+        ret['bic'] = res[0][1]
+        ret['iban'] = res[0][2]
+        ret['payee'] = res[0][3]
         ret['mode'] = 'Transfer (EU)'
         return ret
 
     # "Uw overschrijving -- BE80777591050277 Distr. Alabama -- Finances Voidstreet 22 Bus 111 2600 Alabama US Com: +++001/0028/72387+++"
-    pattern = re.compile( "^Uw\xa0overschrijving -- (\w\w\d+) ([^ ]*) (\d+)\xa0(\w+)\xa0(\w+)$" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) -- (\w\w\d+) ([^ ]*) (\d+)\xa0(\w+)\xa0(\w+)$" )
     res = pattern.findall( message )
     if len(res) == 1:
-        ret['account number'] = res[0][0]
-        ret['payee'] = res[0][1]
-        ret['postal code'] = res[0][2]
-        ret['city'] = res[0][3]
-        ret['country'] = res[0][4]
+        ret['account number'] = res[0][1]
+        ret['payee'] = res[0][2]
+        ret['postal code'] = res[0][3]
+        ret['city'] = res[0][4]
+        ret['country'] = res[0][5]
         ret['mode'] = 'Transfer (international)'
         return ret
 
     # "Uw overschrijving -- BE80777591050277 Distr. Alabama -- Finances Voidstreet 22 Bus 111 2600 Alabama US Com: +++001/0028/72387+++"
-    pattern = re.compile( "^Uw\xa0overschrijving -- (\w\w\d+) ([^ ]*) (.*)$" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) -- (\w\w\d+) ([^ ]*) (.*)$" )
     res = pattern.findall( message )
     if len(res) == 1:
-        ret['account number'] = res[0][0]
-        ret['payee'] = res[0][1]
-        ret['address'] = res[0][2]
+        ret['account number'] = res[0][1]
+        ret['payee'] = res[0][2]
+        ret['address'] = res[0][3]
         ret['mode'] = 'Transfer (international)'
         return ret
 
     # "Uw overschrijving -- BE42091010100254 ZNA - - BE Com: +++510/9515/61064+++ Valutadatum: 01/01/1900"
-    pattern = re.compile( "^Uw\xa0overschrijving -- (\w\w\d+) ([^ ]*).*$" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) -- (\w\w\d+) ([^ ]*).*$" )
     res = pattern.findall( message )
     if len(res) == 1:
-        ret['account number'] = res[0][0]
-        ret['payee'] = res[0][1]
+        ret['account number'] = res[0][1]
+        ret['payee'] = res[0][2]
         ret['mode'] = 'Transfer (international)'
         return ret
 
     # "Uw overschrijving -- BE42091010100254 ZNA - - BE Com: +++510/9515/61064+++ Valutadatum: 01/01/1900"
-    pattern = re.compile( "^Uw\xa0overschrijving -- (\w\w\d+) ([^ ]*).*$" )
+    pattern = re.compile( "^(Uw\xa0overschrijving|Votre\xa0virement) -- (\w\w\d+) ([^ ]*).*$" )
     res = pattern.findall( message )
     if len(res) == 1:
-        ret['account number'] = res[0][0]
-        ret['payee'] = res[0][1]
+        ret['account number'] = res[0][1]
+        ret['payee'] = res[0][2]
         ret['mode'] = 'Transfer (international)'
         return ret
 
@@ -304,32 +332,40 @@ def _incoming_transaction( message ):
     ret = _empty_transaction()
 
     # incoming national
-    pattern = re.compile( "^Overschrijving\xa0te\xa0uwen\xa0gunste (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), ([^ ]*) (.*)" )
+    pattern = re.compile( "^(Overschrijving\xa0te\xa0uwen\xa0gunste|Virement\xa0en\xa0votre\xa0faveur) (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^,]*), ([^ ]*) (.*)" )
     res = pattern.findall( message )
     if len(res) == 1:
         # no manual transaction
-        ret['account number'] = res[0][0]
-        ret['payee'] = res[0][1]
-        ret['address'] = res[0][2:4]
-        ret['message'] = res[0][4]
+        ret['account number'] = res[0][1]
+        ret['payee'] = res[0][2]
+        ret['address'] = res[0][3:5]
+        ret['message'] = res[0][5]
         return ret
 
     # incoming international
     # Overschrijving\xa0te\xa0uwen\xa0gunste -- BE08737000540213 CAP\xa0MARIANNE\xa0CUPERUSSTRAAT\xa034\xa02018 ANTWERPEN\xa0BE Com:\xa0INTERNET
     split_message = message.split(' ')
-    pattern = re.compile( "^Overschrijving\xa0te\xa0uwen\xa0gunste -- (\w\w\d+) ([^ ]*\d\d\d\d \w+\xa0\w\w) Com:\xa0(.*)" )
+    pattern = re.compile( "^(Overschrijving\xa0te\xa0uwen\xa0gunste|Virement\xa0en\xa0votre\xa0faveur) -- (\w\w\d+) ([^ ]*\d\d\d\d \w+\xa0\w\w) Com:\xa0(.*)" )
     res = pattern.findall( message )
     if len(res) == 1:
-        ret['account number'] = res[0][0]
-        ret['payee'] = res[0][1]
-        ret['message'] = res[0][2]
+        ret['account number'] = res[0][1]
+        ret['payee'] = res[0][2]
+        ret['message'] = res[0][3]
         return ret
 
     # Overschrijving te uwen gunste -- BBPIPTPL PT50 0010 0000 1943 9480 0011 3 JOHN DOE VOIDSTREET XXIII 117 3830 - 000 ILHAVO PORTUGAL PT Com: TEST MESSAGE Valutadatum: 01/01/1900
-    pattern = re.compile( "^Overschrijving\xa0te\xa0uwen\xa0gunste -- (\w+) ([^ ]*) (.*) Com:\xa0(.*)" )
+    pattern = re.compile( "^(Overschrijving\xa0te\xa0uwen\xa0gunste|Virement\xa0en\xa0votre\xa0faveur) -- (\w+) ([^ ]*) (.*) Com:\xa0(.*)" )
     res = pattern.findall( message )
     if len(res)==1:
-        ret['bic'] = res[0][0]
+        ret['bic'] = res[0][1]
+        ret['iban'] = res[0][2]
+        ret['payee'] = res[0][3]
+        ret['message'] = res[0][4]
+        return ret
+
+    pattern = re.compile( "^(Overschrijving\xa0te\xa0uwen\xa0gunste|Virement\xa0en\xa0votre\xa0faveur) -- ([^ ]*) (.*) Com:\xa0(.*)" )
+    res = pattern.findall( message )
+    if len(res)==1:
         ret['iban'] = res[0][1]
         ret['payee'] = res[0][2]
         ret['message'] = res[0][3]
@@ -403,7 +439,7 @@ def _check( message ):
     return None
 # ==============================================================================
 # Dissect something like
-# Diverse verrichtingen -- TERUGBETALING
+# Diverseï¿½verrichtingen -- TERUGBETALING
 def _repayment( message ):
 
     ret = _empty_transaction()
@@ -417,7 +453,7 @@ def _repayment( message ):
     return None
 # ==============================================================================
 # Dissect something like
-# Uw verkoop vreemde bankbiljetten -- Valutadatum: 20/09/2010
+# Uwï¿½verkoopï¿½vreemdeï¿½bankbiljetten -- Valutadatum:ï¿½20/09/2010
 def _foreign_exchanges( message ):
 
     ret = _empty_transaction()
@@ -431,7 +467,7 @@ def _foreign_exchanges( message ):
     return None
 # ==============================================================================
 # Dissect something like
-# Afrekening kaarten 666-0000004-83 Valutadatum: 01/03/2010
+# Afrekeningï¿½kaarten 666-0000004-83 Valutadatum:ï¿½01/03/2010
 def _clearance( message ):
 
     ret = _empty_transaction()
@@ -445,7 +481,7 @@ def _clearance( message ):
     return None
 # ==============================================================================
 # Dissect something like
-# Opneming van contanten -- Valutadatum: 20/09/2010
+# Opnemingï¿½vanï¿½contanten -- Valutadatum:ï¿½20/09/2010
 def _cash_withdrawal( message ):
 
     ret = _empty_transaction()
@@ -490,7 +526,7 @@ def _proton( message ):
 def _cards_clearance( message ):
     ret = _empty_transaction()
 
-    pattern = re.compile( "^Afrekening\xa0kaarten 666-0000004-83$" )
+    pattern = re.compile( "^Afrekening\xa0kaarten \d\d\d-\d\d\d\d\d\d\d-\d\d$" )
     if len( pattern.findall( message ) ) > 0:
         ret['mode'] = "Card clearance"
         return ret
@@ -501,13 +537,13 @@ def _cards_clearance( message ):
 def _direct_debit( message ):
     ret = _empty_transaction()
 
-    pattern = re.compile( "^Domicili\xebring 000-0000000-00 (.*) DOM.\xa0:\xa0(\d\d\d-\d\d\d\d\d\d\d-\d\d)\xa0MED.\xa0:\xa0([\w\d]*).*REF.\xa0:\xa0(\d\d\d/\d\d\d\d/\d\d\d\d\d)$" )
+    pattern = re.compile( "^(Domicili\xebring|Domiciliation) 000-0000000-00 (.*) DOM.\xa0:\xa0(\d\d\d-\d\d\d\d\d\d\d-\d\d)\xa0MED.\xa0:\xa0([\w\d]*).*REF.\xa0:\xa0(\d\d\d/\d\d\d\d/\d\d\d\d\d)$" )
     res = pattern.findall( message )
     if len(res)>0:
-        ret['payee'], ret['account number'] = res[0][0:2]
-        if res[0][2] != '':
-            ret['message'] = res[0][2]
-        ret['number'] = res[0][3]
+        ret['payee'], ret['account number'] = res[0][1:3]
+        if res[0][3] != '':
+            ret['message'] = res[0][3]
+        ret['number'] = res[0][4]
         ret['mode'] = 'Direct debit'
         return ret
     else:
@@ -521,13 +557,13 @@ def _titanium( message ):
     ret[ 'mode' ] = 'Credit card'
 
     # strip useless " Aanmaak uitgavenstaat: 22/02/2010  Boekingsdatum: 01/03/2010"
-    message = re.sub( " Aanmaak\xa0uitgavenstaat:\xa0\d\d/\d\d/\d\d\d\d\xa0 Boekingsdatum:\xa0\d\d/\d\d/\d\d\d\d$",
+    message = re.sub( " (Aanmaak\xa0uitgavenstaat|CrÃ©ation\xa0Ã©tat\xa0des\xa0dÃ©penses):\xa0\d\d/\d\d/\d\d\d\d\xa0 (Boekingsdatum|Date\xa0de\xa0comptabilisation):\xa0\d\d/\d\d/\d\d\d\d$",
                       "",
                       message
                     )
 
     # get contents
-    pattern = re.compile( "^db\xa0Titanium\xa0Card\xa0Nr.\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d\d\d\d (.*)" )
+    pattern = re.compile( "^db\xa0Titanium\xa0Card\xa0N[ro].\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d\d\d\d (.*)" )
 
     res = pattern.findall( message )
     if len(res) == 1:
@@ -585,17 +621,17 @@ def _standing_national( message ):
     ret = _empty_transaction()
 
     # pattern *with address
-    pattern = re.compile( "Uw\xa0doorlopende\xa0opdracht (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^ ]*) STANDING ORDER (\d\d\d\d\d)$" )
+    pattern = re.compile( "(Uw\xa0doorlopende\xa0opdracht|Votre\xa0ordre\xa0permanent) (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) ([^ ]*) STANDING ORDER (\d\d\d\d\d)$" )
     results = pattern.findall( message )
     if len(results)==1:
-        ret['account number'], ret['payee'], ret['address'], ret['number'] = results[0]
+        ret['account number'], ret['payee'], ret['address'], ret['number'] = results[0][1:]
         return ret
 
     # pattern without address
-    pattern = re.compile( "Uw\xa0doorlopende\xa0opdracht (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) STANDING ORDER (\d\d\d\d\d)$" )
+    pattern = re.compile( "(Uw\xa0doorlopende\xa0opdracht|Votre\xa0ordre\xa0permanent) (\d\d\d-\d\d\d\d\d\d\d-\d\d) ([^ ]*) STANDING ORDER (\d\d\d\d\d)$" )
     results = pattern.findall( message )
     if len(results)==1:
-        ret['account number'], ret['payee'], ret['number'] = results[0]
+        ret['account number'], ret['payee'], ret['number'] = results[0][1:]
         return ret
 
     return None
@@ -605,12 +641,27 @@ def _standing_national( message ):
 def _standing_international( message ):
     ret = _empty_transaction()
 
+    # cut "Com: .*"
+    comm_pattern = re.compile( ".* Com:\xa0(.*)$" )
+    res = comm_pattern.findall( message )
+    if len(res)==1:
+        ret['message'] = res[0]
+        message = re.sub(  " Com:\xa0.*$", "", message )
+
     # pattern *with address
-    pattern = re.compile( "^Uw\xa0doorlopende\xa0opdracht -- (\w\w\w\w\w\w\w\w)\xa0(\w\w\d\d\xa0\w\w\w\w\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d*) (.*)$" )
+    pattern = re.compile( "^(Uw\xa0doorlopende\xa0opdracht|Votre\xa0ordre\xa0permanent) -- (\w\w\w\w\w\w\w\w)\xa0(\w\w\d\d\xa0\w\w\w\w\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d*) (.*)$" )
     results = pattern.findall( message )
     if len(results)==1:
         ret['mode'] = 'Standing order'
-        ret['bic'], ret['iban'], ret['payee'] = results[0]
+        ret['bic'], ret['iban'], ret['payee'] = results[0][1:]
+        return ret
+
+    # pattern *without bic
+    pattern = re.compile( "^(Uw\xa0doorlopende\xa0opdracht|Votre\xa0ordre\xa0permanent) -- (\w\w\d\d\xa0[\xa0\d]*)\xa0(.*)$" )
+    results = pattern.findall( message )
+    if len(results)==1:
+        ret['mode'] = 'Standing order'
+        ret['iban'], ret['payee'] = results[0][1:]
         return ret
 
     return None
@@ -625,12 +676,12 @@ def _atm_international( message ):
     # Split the message by spaces (not \xa0's and the like).
     split_message = message.split( " " )
 
-    pattern = re.compile("^Geldopvraging\xa0te:\xa0(.*)")
+    pattern = re.compile("^(Geldopvraging\xa0te|Retrait\xa0d'argent\xa0\xe0):\xa0(.*)")
     res = pattern.findall( split_message[1] )
-    if split_message[0] == "Bancontact" and len(res) > 0:
 
+    if split_message[0] == "Bancontact" and len(res) > 0:
         # 'Bancontact', location, date information present
-        ret['location'] = res[0].replace('\xa0'," ").strip()
+        ret['location'] = res[0][1].replace('\xa0'," ").strip()
 
         if len(split_message) >= 6: # foreign currency information present
             # Get value.
@@ -667,7 +718,7 @@ def _interest( message ):
     ret = _empty_transaction()
 
     # in the same currency:
-    pattern = re.compile("^Intresten\xa0-\xa0kosten --$")
+    pattern = re.compile("^(Intresten\xa0-\xa0kosten|Int\xe9r\xeats\xa0-\xa0Frais) --$")
     res = pattern.findall( message )
 
     if len(res)>0:
@@ -689,3 +740,30 @@ def _refund( message ):
 
     return None
 # ==============================================================================
+# Diverse verrichtingen -- TERUGBETALING
+def _transfer_cancelled( message ):
+    ret = _empty_transaction()
+
+    # cut "Com: .*"
+    comm_pattern = re.compile( ".* Com:\xa0(.*)$" )
+    res = comm_pattern.findall( message )
+    if len(res)==1:
+        ret['message'] = res[0]
+        message = re.sub(  " Com:\xa0.*$", "", message )
+
+    pattern = re.compile( "^(Annulation\xa0virement) -- ([^ ]*) (\w\w\d\d\xa0\w\w\w\w\xa0\d\d\d\d\xa0\d\d\d\d\xa0\d*)\xa0(.*)" )
+    res = pattern.findall( message )
+    if len(res)==1:
+        ret['bic'] = res[0][1]
+        ret['iban'] = res[0][2]
+        ret['payee'] = res[0][3]
+        ret[ 'mode' ] = 'cancelled transfer'
+        return ret
+
+    pattern = re.compile( "^Transfert\xa0entre\xa0vos\xa0comptes\xa0Deutsche\xa0Bank --" )
+    res = pattern.findall( message )
+    if len(res)==1:
+        ret[ 'mode' ] = 'internal transfer'
+        return ret
+
+    return None

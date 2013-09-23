@@ -24,11 +24,12 @@
 Writes the data in OFX format according to the specification at
 http://www.ofx.net/DownloadPage/Downloads.aspx
 '''
+from pprint import pprint
 import datetime
 import re
 import lxml.etree as etree
 # ==============================================================================
-def print_ofx( entries ):
+def get_ofx( entries ):
 
     ofx = etree.Element( "OFX" )
 
@@ -110,7 +111,6 @@ def _create_ofx_banktranlist( entries ):
     return banktranlist
 # ==============================================================================
 def _create_ofx_transaction( entry ):
-
     stmttrn = etree.Element( "STMTTRN" )
 
     # decide upon the transaction type

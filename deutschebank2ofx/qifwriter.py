@@ -23,7 +23,7 @@
 import datetime
 import categories
 # ==============================================================================
-def print_qif( entries ):
+def get_qif( bank_account, entries ):
 
     str = []
 
@@ -33,7 +33,7 @@ def print_qif( entries ):
     str.append( "T0.00" )
     str.append( "CX" )
     str.append( "POpening Balance" )
-    str.append( "L[dasd]" )
+    str.append( "L[%s]" % bank_account)
     str.append( "^" )
 
     # loop over all entries

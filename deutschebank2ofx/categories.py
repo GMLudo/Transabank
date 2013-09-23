@@ -193,6 +193,9 @@ def get_category( entry ):
         if pat.match( entry['payee'] ) is not None:
             return 'Business:Other'
         # ---------------------------------------------------------------------
+        pat = re.compile( '^Scarlet.*' )
+        if pat.match( entry['payee'] ) is not None:
+            return 'Bills:Telephone'
 
     if entry['message'] is not None:
         # ---------------------------------------------------------------------
@@ -211,7 +214,7 @@ def get_category( entry ):
         pat = re.compile( '^Belgacom.*' )
         if pat.match( entry['message'] ) is not None:
             return 'Bills:Telephone'
-        # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
     return None
 # ===============================================================================

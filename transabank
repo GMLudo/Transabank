@@ -1,0 +1,64 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import argparse
+import logging.config
+import ConfigParser
+
+from deutschebank2ofx import dbreader, ofxwriter, qifwriter
+
+if __name__ == '__main__':
+    # Catch signals to remove the stack trace print when the program is stopped.
+    # PID file and caches file are correctly removed and closed by the latest "finally:"
+#     for signum in [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGABRT, signal.SIGTERM, ]:
+#         signal.signal(signum, (lambda signum, frame: None))
+
+    # CLI
+    ARGS_PARSER = argparse.ArgumentParser(description='Transabank converts a crappy export from your bank (CSV, HTML, PDF) to a comprehensive format (OFX, QIF, CSV) for your accounting software (KMyMoney, GnuCash...).',
+                                          epilog='Example: transabank '
+        '--logconfig=/etc/transabank/logging.ini')
+    ARGS_PARSER.add_argument('--logging',
+                             default='etc/logging.ini',
+                             help='Log config file.')
+    ARGS_PARSER.add_argument('-b','--bank',
+                             default="deutschebank.be",
+                             help='Your bank.',
+                             choices=['deutschebank.be'])
+    ARGS_PARSER.add_argument('-ba','--bank_account',
+                             default="account",
+                             help='Name of account in accounting software.')
+    ARGS_PARSER.add_argument('-if', '--input_format',
+                             default='csv',
+                             help='Input format.',
+                             choices=['csv', 'html', 'pdf'])
+    ARGS_PARSER.add_argument('-i', '--input_file',
+                             required=True,
+                             help='Crappy export from your bank (CSV, HTML, PDF).')
+    ARGS_PARSER.add_argument('-of', '--output_format',
+                             default='qif',
+                             help='File format for your accounting software.',
+                             choices=['qif', 'ofx', 'csv'])
+    ARGS_PARSER.add_argument('-o', '--output_file',
+                             required=True,
+                             help='File output.')
+    ARGS = ARGS_PARSER.parse_args()
+
+    # Logging
+    try:
+        logging.config.fileConfig(ARGS.logging)
+    except ConfigParser.NoSectionError:
+        print('Your logging file is wrong or is missing, please to provide a correct one.')
+    else:
+        file_name = ARGS.input_file
+        delim = '|'
+
+        transactions, mc_transactions = dbreader.read_db_csvfile( file_name, delim )
+
+        data = {}
+        data['qif'] = qifwriter.get_qif( ARGS.bank_account, transactions )
+        #data['ofx'] = ofxwriter.get_ofx( transactions )
+#         for type_ in ['qif', 'ofx']:
+#             with open("2013.%s" % type_, "w") as f:
+#                 f.write(data[type_])
+        with open(ARGS.output_file, "w") as f:
+            f.write(data['qif'])
