@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 # ==============================================================================
 #
 # Copyright (C) 2010 Nico Schl"omer
@@ -24,7 +26,7 @@ import logging
 from pprint import pprint
 import datetime # for handling date strings
 import re
-import csv
+import unicodecsv
 # ==============================================================================
 # Read a CSV file and return parsed lists of transaction of the regular account
 # and transactions of the MasterCard account.
@@ -34,7 +36,7 @@ LOGGER = logging.getLogger(__name__)
 def read_db_csvfile( file_name, delim = "|" ):
 
     # read the file
-    db_reader = csv.reader( open(file_name), delimiter=delim )
+    db_reader = unicodecsv.reader( open(file_name), delimiter=delim.encode('utf-8'), encoding='cp1252')
 
     transactions = []
     mc_transactions = []
@@ -101,6 +103,8 @@ def _process_db_csv_entry( row ):
 # ==============================================================================
 def _process_message_body( message, is_mastercard_transaction ):
     # extract the value date ("Valutadatum")
+    print("="*50)
+    print(message)
     message, value_date = _extract_value_date( message )
 
     # strip "(18/04/09 14:09)"

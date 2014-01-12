@@ -1,9 +1,11 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 
 import argparse
 import logging.config
 import ConfigParser
+import codecs
 
 from deutschebank2ofx import dbreader, ofxwriter, qifwriter
 
@@ -16,7 +18,7 @@ if __name__ == '__main__':
     # CLI
     ARGS_PARSER = argparse.ArgumentParser(description='Transabank converts a crappy export from your bank (CSV, HTML, PDF) to a comprehensive format (OFX, QIF, CSV) for your accounting software (KMyMoney, GnuCash...).',
                                           epilog='Example: transabank '
-        '--logconfig=/etc/transabank/logging.ini')
+        '--logconfig=etc/logging.ini')
     ARGS_PARSER.add_argument('--logging',
                              default='etc/logging.ini',
                              help='Log config file.')
@@ -26,7 +28,7 @@ if __name__ == '__main__':
                              choices=['deutschebank.be'])
     ARGS_PARSER.add_argument('-ba','--bank_account',
                              default="account",
-                             help='Name of account in accounting software.')
+                             help='Name of account in your accounting software.')
     ARGS_PARSER.add_argument('-if', '--input_format',
                              default='csv',
                              help='Input format.',
@@ -55,10 +57,10 @@ if __name__ == '__main__':
         transactions, mc_transactions = dbreader.read_db_csvfile( file_name, delim )
 
         data = {}
-        data['qif'] = qifwriter.get_qif( ARGS.bank_account, transactions )
+        data['qif'] = qifwriter.get_qif( ARGS.bank_account, transactions + mc_transactions )
         #data['ofx'] = ofxwriter.get_ofx( transactions )
 #         for type_ in ['qif', 'ofx']:
 #             with open("2013.%s" % type_, "w") as f:
 #                 f.write(data[type_])
-        with open(ARGS.output_file, "w") as f:
+        with codecs.open(ARGS.output_file, "wb", "utf-8") as f:
             f.write(data['qif'])

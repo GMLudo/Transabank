@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 # ==============================================================================
 #
 # Copyright (C) 2010 Nico Schl"omer
