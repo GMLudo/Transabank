@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 # ==============================================================================
 #
 # Copyright (C) 2010 Nico Schl"omer
@@ -21,200 +23,175 @@
 #
 # ==============================================================================
 import re
+from pprint import pprint
 # ==============================================================================
-def get_category( entry ):
 
-    # to case-insensitive matching
-    re.IGNORECASE
+CATEGORIES = {
+    '^GB.*': 'Alimentation:Supermarché', # 'Food:Groceries',
+    '^DOME\xc2\xa0BVBA$': 'Alimentation:Supermarché',
+    '^DELH.*': 'Alimentation:Supermarché',
+    '^LOUIS DELHAIZE.*': 'Alimentation:Supermarché',
+    '^COLRUYT.*': 'Alimentation:Supermarché',
+    '^VLEUGELS.*': 'Alimentation:Supermarché',
+    '^BUERMANS.*': 'Alimentation:Supermarché',
+    '^PAIN QUOTIDIEN$': 'Alimentation',
+    '^EXPRESS GERMOIR$': 'Alimentation:Supermarché',
+    '^SHOP N GO.*$': 'Alimentation:Supermarché',
+    '^AUCHAN.*$': 'Alimentation:Supermarché',
+    '^ALLIER DOYET$': 'Alimentation:Supermarché',
+    '^E\.LECLERC.*$': 'Alimentation:Supermarché',
+    '^CARREFOUR.*$': 'Alimentation:Supermarché',
 
-    print repr( entry['payee'] )
+    '^C.C. ALLOCATIONS FAM.*$': 'Allocations et Sécurité sociale:Allocations familiales',
+
+    '^MUT\. ST MICHEL.*$': 'Allocations et Sécurité sociale:Remboursement de frais de santé',
+
+    '^O\.N\.E\.M\..*$': 'Allocations et Sécurité sociale:Allocations interruption carriere',
+
+    '^WANIMO$': 'Animaux',
+
+    '^PARKING.*$': 'Automobile:Stationnement',
+
+    '^DAC.*$': 'Automobile:Carburant',
+    '^SA CHIRAULT DAC.*$': 'Automobile:Carburant',
+
+    '^AUTOROUTE.*$': 'Automobile:Péage',
+    '^COFIROUTE.*$': 'Automobile:Péage',
+    '^SANEF.*$': 'Automobile:Péage',
+    '^VIADUC.*$': 'Automobile:Péage',
+    '^APRR.*$': 'Automobile:Péage',
+
+    '^AMAZON EU.*$': 'Dons:Cadeaux',
+    '^SEPTIEME TASSE\(LA\)$': 'Dons:Cadeaux',
+    '^CONF\.DU TECH$': 'Dons:Cadeaux',
+    '^IRSI CHOCOLATIER.*$': 'Dons:Cadeaux',
+
+    '^GREENPEACE.*$': 'Dons:Caritatif',
+    '^GAIA.*$': 'Dons:Caritatif',
+    '^WWF.*$': 'Dons:Caritatif',
+    '^HANDICAP INTERNATIONAL.*$': 'Dons:Caritatif',
+
+    '^PH BAILLI LOUISE.*$': 'Santé:Pharmacie',
+    '^PHARM.*$': 'Santé:Pharmacie',
+    '^PH\.AELTERMAN.*$': 'Santé:Pharmacie',
+    '^MULTIPHARMA.*$': 'Santé:Pharmacie',
+
+    '^INSTITUT DE BIOLOGIE.*$': 'Santé:Analyses',
+
+    '^QUICK.*$': 'Restaurant:Fast-food',
+    '^MC ?DONALDS.*$': 'Restaurant:Fast-food',
+    '^MC DONALD\'S.*$': 'Restaurant:Fast-food',
+    '^SARL ORIBELULO$': 'Restaurant:Fast-food',
+
+    '^PIZZA HUT.*$': 'Restaurant:Pizzeria',
+
+    '^EXKI.*$': 'Restaurant:Autres restaurants',
+    '^PANOS.*$': 'Restaurant:Autres restaurants',
+    '^SUBWAY$': 'Restaurant:Autres restaurants',
+    '^YAMA SUSHI$': 'Restaurant:Autres restaurants',
+    '^BRASSERIE.*$': 'Restaurant:Autres restaurants',
+    '^BRUSSELS GRILL.*$': 'Restaurant:Autres restaurants',
+    '^RESTO.*$': 'Restaurant:Autres restaurants',
+    '^L AMOUR FOU$': 'Restaurant:Autres restaurants',
+    '^ETS NICOLAS$': 'Restaurant:Autres restaurants',
+    '^PESCATORE$': 'Restaurant:Autres restaurants',
+    '^SERVIBEL.*$': 'Restaurant:Autres restaurants',
+    '^WWW\.2013\.RMLL\.INFO/FR$': 'Restaurant:Autres restaurants',
+    '^QUARTIER LIBRE$': 'Restaurant:Autres restaurants',
+
+    '^NMBS.*$': 'Transport:Train',
+    '^SNCB\xc2\xa0NMBS.*$': 'Transport:Train',
+
+    '^STIB.*$': 'Transport:Transports en commun',
+    '^15404 GO BAILLI$': 'Transport:Transports en commun',
+
+    '^H&M.*': 'Soins:Habillement',
+    '^ZARA.*': 'Soins:Habillement',
+    '^WE\xc2\xa0MEN.*': 'Soins:Habillement',
+    '^BALTIC\xc2\xa0TEXTILE$': 'Soins:Habillement',
+    '^EPISODE\xc2\xa0BELGIUM$': 'Soins:Habillement',
+    '^COS.*$': 'Soins:Habillement',
+    '^LA HALLE.*$': 'Soins:Habillement',
+    '^GALERIA INNO.*$': 'Soins:Habillement',
+    '^SARENZA.*$': 'Soins:Habillement',
+    '^LA REDOUTE.*$': 'Soins:Habillement',
+
+    '^SCHEDOM\xc2\xa0NV/SA.*': 'Frais généraux:Internet',
+    '^schedom nv/sa.*': 'Frais généraux:Internet',
+    '^Scarlet.*': 'Frais généraux:Internet',
+
+    '^Belgacom.*$': 'Frais généraux:Téléphone',
+
+    '^Proximus.*$': 'Frais généraux:Téléphone portable',
+
+    '^LAMPIRIS.*$': 'Frais généraux:Electricité',
+    '^Electrabel.*$': 'Frais généraux:Electricité',
+
+    '^AWW.*$': 'Frais généraux:Eau',
+
+    '^Onafhankelijk Ziekenfonds$': 'Assurance',
+    '^ONAFHANKELIJK\xc2\xa0ZIEKENFONDS$': 'Assurance',
+
+    '^GOOGLE.*$': 'Loisirs:Informatique',
+
+    '^AZ MIDDELHEIM$': 'Santé:Hôpital',
+    '^HOPITAUX.*$': 'Santé:Hôpital',
+    '^H\.I\.S\..*$': 'Santé:Hôpital',
+    '^HIS.*$': 'Santé:Hôpital',
+
+    '^BELFIUS.*$': "Retrait d'espèces",
+    '^BMPB.*$': "Retrait d'espèces",
+    '^DEXIA.*$': "Retrait d'espèces",
+    '^KBC.*$': "Retrait d'espèces",
+    '^CBC.*$': "Retrait d'espèces",
+    "^SELF'BANK MERCAT$": "Retrait d'espèces",
+    "^WILRIJK BOUDEWIJ$": "Retrait d'espèces",
+    "^ANTW . GROENPL.$": "Retrait d'espèces",
+    "^BERCHEM GROTE ST$": "Retrait d'espèces",
+    "^ELSENE NAAMSEPOO$": "Retrait d'espèces",
+
+    '^FWO*$': "Revenus du travail:Salaire net",
+    '^DDFIP*$': "Revenus du travail:Salaire net",
+
+    '^IKEA.*$': "Maison:Ameublement",
+
+    '^Sodexo Titres Services.*$': 'Maison:Personnel de maison',
+
+    '^BRICO.*$': "Maison:Travaux",
+    '^LEROY MERLIN.*$': "Maison:Travaux",
+
+    '^EUREKAKIDS$': 'Loisirs:Jeux et jouets',
+    '^EVEIL&amp;JEUX.*$': 'Loisirs:Jeux et jouets',
+    '^LA GDE RECRE.*$': 'Loisirs:Jeux et jouets',
+    '^GRANDE RECRE.*$': 'Loisirs:Jeux et jouets',
+
+    '^WWW\.DREAMBABY\.BE$': 'Enfants:Equipement',
+
+    '^DECATHLON.*$': 'Loisirs:Sport',
+    '^Golazo Sports.*$': 'Loisirs:Sport',
+
+    '^Belgique Loisirs.*$': 'Loisirs:Livres et Magazines',
+
+    '^BUREAU DE RECETTE.*$': 'Taxes et impôts',
+
+    '^S\.P\.F\. FINANCES.*$': 'Autres revenus:Crédits d\'impôts',
+
+    '^PHOTOLINEA$': 'Autres dépenses:Photographie',
+}
+
+def get_category(entry):
 
     if entry['payee'] is not None:
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^GB.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-
-        pat = re.compile( '^DOME\xc2\xa0BVBA$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-
-        # Delhaize
-        pat = re.compile( '^DELH.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-
-        pat = re.compile( '^COLRUYT.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-
-        pat = re.compile( '^VLEUGELS.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-
-        pat = re.compile( '^BUERMANS.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-
-        pat = re.compile( '^PAIN QUOTIDIEN$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Groceries'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^PIZZA HUT.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Dining Out'
-
-        pat = re.compile( '^EXKI.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Dining Out'
-
-        pat = re.compile( '^QUICK.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Dining Out'
-
-        pat = re.compile( '^SUBWAY$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Food:Dining Out'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^NMBS.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Travel:Fares'
-
-        pat = re.compile( '^SNCB\xc2\xa0NMBS.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Travel:Fares'
-
-        # Metro Brussels
-        pat = re.compile( '^STIB.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Travel:Fares'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^H&M.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Clothing'
-
-        pat = re.compile( '^ZARA.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Clothing'
-
-        pat = re.compile( '^WE\xc2\xa0MEN.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Clothing'
-
-        pat = re.compile( '^BALTIC\xc2\xa0TEXTILE$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Clothing'
-
-        pat = re.compile( '^EPISODE\xc2\xa0BELGIUM$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Clothing'
-
-        pat = re.compile( '^COS.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Clothing'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^SCHEDOM\xc2\xa0NV/SA.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Bills:Telephone'
-
-        pat = re.compile( '^schedom nv/sa.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Bills:Telephone'
-
-        pat = re.compile( '^LAMPIRIS.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Bills:Electricity'
-
-        pat = re.compile( '^Electrabel.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Bills:Electricity'
-
-        pat = re.compile( '^AWW.*$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Bills:Water & sewage'
-        # --------------------------------------------------------------------
-        pat = re.compile( '^Onafhankelijk Ziekenfonds$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Insurance'
-
-        pat = re.compile( '^ONAFHANKELIJK\xc2\xa0ZIEKENFONDS$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Insurance'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^AZ MIDDELHEIM$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Healthcare:Hospital'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^KBC.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-
-        pat = re.compile( '^DEXIA.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-
-        pat = re.compile( "^SELF'BANK MERCAT$" )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-
-        pat = re.compile( "^WILRIJK BOUDEWIJ$" )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-
-        pat = re.compile( "^ANTW . GROENPL.$" )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-
-        pat = re.compile( "^BERCHEM GROTE ST$" )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-
-        pat = re.compile( "^ELSENE NAAMSEPOO$" )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Cash Withdrawal'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^FWO*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Employment:Salary & wages'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^IKEA.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Household:Furnishings'
-
-        pat = re.compile( '^BRICO.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Household:Furnishings'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^UA$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Employment:Foreign'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^KOPPIE-KOPIE$' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Business:Other'
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^Scarlet.*' )
-        if pat.match( entry['payee'] ) is not None:
-            return 'Bills:Telephone'
+        for pat, cat in CATEGORIES.iteritems():
+            if re.compile(pat, re.IGNORECASE).match(entry['payee']) is not None:
+                return cat
 
     if entry['message'] is not None:
-        # ---------------------------------------------------------------------
-        pat = re.compile( '^electrabel.*' )
-        if pat.match( entry['message'] ) is not None:
-            return 'Bills:Electricity'
+        for pat, cat in CATEGORIES.iteritems():
+            if re.compile(pat, re.IGNORECASE).match(entry['message']) is not None:
+                return cat
 
-        pat = re.compile( '^Electrabel.*' )
-        if pat.match( entry['message'] ) is not None:
-            return 'Bills:Electricity'
-
-        pat = re.compile( '^AWW.*' )
-        if pat.match( entry['message'] ) is not None:
-            return 'Bills:Water & Sewage'
-
-        pat = re.compile( '^Belgacom.*' )
-        if pat.match( entry['message'] ) is not None:
-            return 'Bills:Telephone'
-# ---------------------------------------------------------------------
+    pprint(entry)
+    print("="*50)
 
     return None
-# ===============================================================================
