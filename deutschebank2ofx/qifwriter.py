@@ -25,13 +25,13 @@ from __future__ import unicode_literals
 import datetime
 import categories
 # ==============================================================================
-def get_qif( bank_account, entries ):
+def get_qif(bank_account, entries, year, month, day):
 
     str = []
 
     # first get the bank file
     str.append( "!Type:Bank" )
-    str.append( "D" + datetime.date.today().isoformat() )
+    str.append( "D" + datetime.date(year, month, day).isoformat() )
     str.append( "T0.00" )
     str.append( "CX" )
     str.append( "POpening Balance" )

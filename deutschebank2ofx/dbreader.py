@@ -551,7 +551,15 @@ def _direct_debit( message ):
         ret['mode'] = 'Direct debit'
         return ret
     else:
-        return None
+        pattern = re.compile( "^(Domicili\xebring|Domiciliation) -- (BE\d\d\xa0\d\d\d\xa0\d\d\d\d\d\d\d\xa0\d\d)\xa0(.*) Ref:\xa0.*$" )
+        res = pattern.findall( message )
+        print(res)
+        if len(res)>0:
+            ret['account number'], ret['payee']  = res[0][1:3]
+            ret['mode'] = 'Direct debit'
+            return ret
+        else:
+            return None
 # ==============================================================================
 # Dissect something like
 # db Titanium Card Nr. 0123 5678 1234 5678 PAYDUDE LUL2240 Aanmaak uitgavenstaat: 01/01/1900  Boekingsdatum: 01/01/1900

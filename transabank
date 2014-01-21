@@ -43,6 +43,18 @@ if __name__ == '__main__':
     ARGS_PARSER.add_argument('-o', '--output_file',
                              required=True,
                              help='File output.')
+    ARGS_PARSER.add_argument('--year',
+                             type=int,
+                             required=True,
+                             help='Year of account creation.')
+    ARGS_PARSER.add_argument('--month',
+                             type=int,
+                             required=True,
+                             help='Month of account creation.')
+    ARGS_PARSER.add_argument('--day',
+                             type=int,
+                             required=True,
+                             help='Day of account creation.')
     ARGS = ARGS_PARSER.parse_args()
 
     # Logging
@@ -57,7 +69,7 @@ if __name__ == '__main__':
         transactions, mc_transactions = dbreader.read_db_csvfile( file_name, delim )
 
         data = {}
-        data['qif'] = qifwriter.get_qif( ARGS.bank_account, transactions + mc_transactions )
+        data['qif'] = qifwriter.get_qif(ARGS.bank_account, transactions + mc_transactions, ARGS.year, ARGS.month, ARGS.day)
         #data['ofx'] = ofxwriter.get_ofx( transactions )
 #         for type_ in ['qif', 'ofx']:
 #             with open("2013.%s" % type_, "w") as f:
